@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "main": "build/electron/main.js",
+  "author": {
+    "name": "ModernFix Pros, LLC"
+  },
   "description": "PrivacyFlow — local-first Data Subject Request (DSR) management with a tamper-evident audit trail.",
   "scripts": {
     "dev": "vite",
@@ -39,6 +42,7 @@
       "package.json"
     ],
     "win": {
+      "publisherName": "ModernFix Pros, LLC",
       "target": [
         {
           "target": "portable",

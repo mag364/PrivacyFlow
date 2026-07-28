@@ -4,7 +4,7 @@
 // -----------------------------------------------------------------------------
 
 export const APP_CONFIG = {
-  version: '1.0.10',
+  version: '1.0.11',
   productName: 'PrivacyFlow',
   tagline: 'DSR Tracking',
   updates: {
@@ -13,6 +13,7 @@ export const APP_CONFIG = {
     latestReleaseUrl: 'https://api.github.com/repos/mag364/PrivacyFlow/releases/latest',
     releasesApiUrl: 'https://api.github.com/repos/mag364/PrivacyFlow/releases',
     releasesUrl: 'https://github.com/mag364/PrivacyFlow/releases',
+    latestReleasePageUrl: 'https://github.com/mag364/PrivacyFlow/releases/latest',
   },
   disclaimer:
     'PrivacyFlow is a workflow and record-keeping tool for privacy operations. All demonstration data is fictional.',

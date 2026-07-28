@@ -29,7 +29,7 @@ export interface ChoosePathResult {
 
 export interface DownloadUpdateInput {
   assetApiUrl: string;
-  token: string;
+  token?: string;
   fileName: string;
 }
 

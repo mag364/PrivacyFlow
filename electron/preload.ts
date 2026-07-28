@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('privacyflow', {
     choosePath: () => ipcRenderer.invoke('workspace:choosePath'),
   },
   updater: {
-    downloadReleaseAsset: (input: { assetApiUrl: string; token: string; fileName: string }) =>
+    downloadReleaseAsset: (input: { assetApiUrl: string; token?: string; fileName: string }) =>
       ipcRenderer.invoke('updater:downloadReleaseAsset', input),
   },
   mail: {

@@ -149,12 +149,11 @@ ipcMain.handle('updater:downloadReleaseAsset', async (_e, input: { assetApiUrl?:
   if (!assetApiUrl || !assetApiUrl.startsWith('https://api.github.com/')) {
     throw new Error('A valid GitHub release asset URL is required.');
   }
-  if (!token) throw new Error('A GitHub token is required to download updates from the private repository.');
 
   const res = await fetch(assetApiUrl, {
     headers: {
       Accept: 'application/octet-stream',
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'X-GitHub-Api-Version': '2022-11-28',
     },
   });

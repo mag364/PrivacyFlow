@@ -253,7 +253,7 @@ function UpdateSection() {
     state.status === 'downloaded'
       ? state.release
       : null;
-  const needsTokenHelp = state.status === 'error' && /private repository|access/i.test(state.message);
+  const needsTokenHelp = state.status === 'error' && /private repository|access|token/i.test(state.message);
 
   async function checkForUpdates() {
     setState({ status: 'checking' });
@@ -280,7 +280,7 @@ function UpdateSection() {
 
       if (res.status === 401 || res.status === 403 || res.status === 404) {
         throw new Error(
-          'Unable to read GitHub releases. This is a private repository, so provide a fine-grained GitHub token with repository Contents read access.',
+          'Unable to read GitHub releases. If the repository is private again, provide a fine-grained GitHub token with repository Contents read access.',
         );
       }
       if (!res.ok) throw new Error(`GitHub release check failed with HTTP ${res.status}.`);
@@ -309,13 +309,6 @@ function UpdateSection() {
     }
 
     const trimmedToken = token.trim();
-    if (!trimmedToken) {
-      setState({
-        status: 'error',
-        message: 'A GitHub token is required to download update assets from the private repository.',
-      });
-      return;
-    }
 
     const { release: availableRelease, asset } = state;
     setState({ status: 'downloading', release: availableRelease, asset });
@@ -324,17 +317,17 @@ function UpdateSection() {
       if (desktopUpdater) {
         await desktopUpdater.downloadReleaseAsset({
           assetApiUrl: asset.url,
-          token: trimmedToken,
+          token: trimmedToken || undefined,
           fileName: asset.name,
         });
         setState({ status: 'downloaded', release: availableRelease, fileName: asset.name });
         return;
       }
 
-      const res = await fetch(asset.url, {
+      const res = await fetch(trimmedToken ? asset.url : asset.browser_download_url, {
         headers: {
-          Accept: 'application/octet-stream',
-          Authorization: `Bearer ${trimmedToken}`,
+          Accept: trimmedToken ? 'application/octet-stream' : 'application/octet-stream',
+          ...(trimmedToken ? { Authorization: `Bearer ${trimmedToken}` } : {}),
           'X-GitHub-Api-Version': '2022-11-28',
         },
       });
@@ -377,7 +370,7 @@ function UpdateSection() {
       <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
         <Field
           label="GitHub token"
-          hint="Required for private repository release checks. Stored only in this browser when Remember is enabled."
+          hint="Optional for public releases. Use only if the repository is private again. Stored only in this browser when Remember is enabled."
         >
           <GlassInput
             type="password"
@@ -436,14 +429,14 @@ function UpdateSection() {
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
           <p className="text-xs text-red-200">
             {state.message}
-            {needsTokenHelp ? ' The token only needs access to this repository and Contents: Read-only for checking releases.' : ''}
+            {needsTokenHelp ? ' A token is only needed for private releases and should be scoped to this repository with Contents: Read-only.' : ''}
           </p>
         </div>
       )}
 
       {state.status === 'available' && (
         <p className="text-[11px] text-muted">
-          The update button downloads the newest package with your GitHub token, then opens it from
+          The update button downloads the newest package, then opens it from
           your Downloads folder. Close PrivacyFlow before running the downloaded update.
         </p>
       )}
@@ -669,8 +662,8 @@ export function SettingsPage() {
           '',
           `Your ${APP_CONFIG.productName} account has been created.`,
           '',
-          `Download the latest Windows portable application from the private GitHub release page:`,
-          APP_CONFIG.updates.releasesUrl,
+          `Download the latest Windows portable application here:`,
+          APP_CONFIG.updates.latestReleasePageUrl,
           '',
           `Repository: https://github.com/${APP_CONFIG.updates.owner}/${APP_CONFIG.updates.repo}`,
           '',
@@ -679,7 +672,7 @@ export function SettingsPage() {
           '',
           'You will be prompted to set your own password the first time you sign in.',
           '',
-          'Note: because the repository is private, your GitHub account must have access before the download link will open.',
+          'No GitHub account is required to download the public release.',
         ].join('\n');
         try {
           const outlook = outlookBridge();
@@ -1076,7 +1069,7 @@ export function SettingsPage() {
                 <p className="text-[11px] text-muted">
                   A temporary password is generated automatically and shown to you once after creation. The new
                   user signs in with it and is required to set their own password before gaining access. If an
-                  email address is entered, PrivacyFlow opens an invite draft with the private GitHub release link.
+                  email address is entered, PrivacyFlow opens an invite draft with the public GitHub release link.
                 </p>
               </div>
               <div className="flex justify-end gap-2">

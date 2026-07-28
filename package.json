@@ -3,10 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "build/electron/main.js",
   "description": "PrivacyFlow — local-first Data Subject Request (DSR) management with a tamper-evident audit trail.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:electron": "mkdir -p build/electron && esbuild electron/main.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=build/electron/main.js && esbuild electron/preload.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=build/electron/preload.js && printf '{\"type\":\"commonjs\"}\\n' > build/electron/package.json",
+    "dist:win": "npm run build && npm run build:electron && electron-builder --win portable --x64",
     "preview": "vite preview",
     "test": "vitest run"
   },
@@ -24,11 +27,37 @@
     "zod": "3.23.8",
     "zustand": "4.5.5"
   },
+  "build": {
+    "appId": "com.mag364.privacyflow",
+    "productName": "PrivacyFlow",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "build/electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}-portable.${ext}"
+    }
+  },
   "devDependencies": {
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "5.0.0",
     "autoprefixer": "10.4.20",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.17",
     "typescript": "5.6.3",

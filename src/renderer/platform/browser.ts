@@ -18,7 +18,7 @@ import {
   type Db, appendAudit, createSeed, nextActionFor, nextCaseNumber, nextProjectNumber,
   uid, fakeHash,
 } from './seed';
-import { workspaceBridge, isReadOnly } from './workspace';
+import { workspaceBridge, isReadOnly, mailBridge } from './workspace';
 
 // -----------------------------------------------------------------------------
 // Persistence-backed implementation of PrivacyFlowAPI.
@@ -278,7 +278,13 @@ async function runAutomations(
   const viaM365 = !!m365?.connected;
   const sender = viaM365 ? (m365.accountEmail ?? 'connected mailbox') : null;
   const sendStatus = viaM365
-    ? (m365.mode === 'graph' ? 'Sent via Microsoft 365' : 'Sent via Microsoft 365 (simulated)')
+    ? (
+        m365.mode === 'graph'
+          ? 'Sent via Microsoft 365'
+          : m365.mode === 'outlook'
+            ? 'Opened in Outlook'
+            : 'Sent via Microsoft 365 (simulated)'
+      )
     : 'Sent (automated)';
 
   for (const rule of rules) {
@@ -293,6 +299,12 @@ async function runAutomations(
     const subject = renderTemplate(tpl.subject, c, d.settings.organizationName, tpl.department);
     const body = renderTemplate(tpl.body, c, d.settings.organizationName, tpl.department);
     const now = new Date().toISOString();
+    const draftBridge = m365?.mode === 'outlook' ? mailBridge() : null;
+    const canOpenDraft = !!draftBridge && /.+@.+\..+/.test(recipient);
+
+    if (draftBridge && canOpenDraft) {
+      await draftBridge.openDraft({ to: recipient, subject, body });
+    }
 
     d.communications.push({
       id: uid(),
@@ -300,7 +312,7 @@ async function runAutomations(
       direction: 'Outbound',
       channel: viaM365 ? 'Email (Microsoft 365)' : 'Email',
       subject,
-      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipient}\n\n${body}`,
+      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipient}${draftBridge && !canOpenDraft ? '\n\nOutlook draft was not opened because this automation target does not have an email address.' : ''}\n\n${body}`,
       sentAt: now,
       status: sendStatus,
       createdBy: 'automation',

@@ -279,7 +279,7 @@ export interface M365Integration {
   tenantId?: string;
   connectedAt?: string;
   connectedBy?: string;
-  mode: 'graph' | 'simulated';
+  mode: 'graph' | 'outlook' | 'simulated';
 }
 
 export interface OrgSettings {

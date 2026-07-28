@@ -52,6 +52,16 @@ export interface UpdaterBridge {
   downloadReleaseAsset: (input: DownloadUpdateInput) => Promise<DownloadUpdateResult>;
 }
 
+export interface MailDraftInput {
+  to: string;
+  subject: string;
+  body: string;
+}
+
+export interface MailBridge {
+  openDraft: (input: MailDraftInput) => Promise<boolean>;
+}
+
 const WRITE_STATE: WorkspaceLockState = {
   mode: 'write',
   info: { user: '', machine: '', pid: 0, since: '', heartbeat: '' },
@@ -61,6 +71,7 @@ interface Injected {
   isElectron?: boolean;
   workspace?: WorkspaceBridge;
   updater?: UpdaterBridge;
+  mail?: MailBridge;
 }
 
 function injected(): Injected {
@@ -73,6 +84,10 @@ export function workspaceBridge(): WorkspaceBridge | null {
 
 export function updaterBridge(): UpdaterBridge | null {
   return injected().updater ?? null;
+}
+
+export function mailBridge(): MailBridge | null {
+  return injected().mail ?? null;
 }
 
 // Cached lock state, refreshed at startup and on demand by the UI.

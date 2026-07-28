@@ -167,6 +167,15 @@ ipcMain.handle('updater:downloadReleaseAsset', async (_e, input: { assetApiUrl?:
   return { filePath, opened: !openError };
 });
 
+ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; subject?: string; body?: string }) => {
+  const to = String(input?.to || '').trim();
+  if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
+  const subject = encodeURIComponent(String(input?.subject || ''));
+  const body = encodeURIComponent(String(input?.body || ''));
+  const url = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
+  return shell.openExternal(url);
+});
+
 app.whenReady().then(() => {
   createWindow();
   app.on('activate', () => {

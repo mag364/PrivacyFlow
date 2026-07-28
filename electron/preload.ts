@@ -23,4 +23,7 @@ contextBridge.exposeInMainWorld('privacyflow', {
     downloadReleaseAsset: (input: { assetApiUrl: string; token: string; fileName: string }) =>
       ipcRenderer.invoke('updater:downloadReleaseAsset', input),
   },
+  mail: {
+    openDraft: (input: { to: string; subject: string; body: string }) => ipcRenderer.invoke('mail:openDraft', input),
+  },
 });

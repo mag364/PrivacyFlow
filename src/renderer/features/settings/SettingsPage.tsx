@@ -695,7 +695,7 @@ export function SettingsPage() {
         tenantId: m365Tenant.trim() || undefined,
         connectedAt: new Date().toISOString(),
         connectedBy: user?.name,
-        mode: 'simulated',
+        mode: workspaceBridge() ? 'outlook' : 'simulated',
       },
     });
     setSettings(s);
@@ -816,6 +816,7 @@ export function SettingsPage() {
                   <p className="text-xs text-muted">
                     Connected {fmtDateTime(m365.connectedAt)}{m365.connectedBy ? ` by ${m365.connectedBy}` : ''}
                     {m365.tenantId ? ` · Tenant ${m365.tenantId}` : ''}
+                    {m365.mode === 'outlook' ? ' · Outlook desktop drafts' : ''}
                     {m365.mode === 'simulated' ? ' · Simulated delivery (browser preview)' : ''}
                   </p>
                 </div>
@@ -826,10 +827,9 @@ export function SettingsPage() {
                 )}
               </div>
               <p className="text-xs text-muted">
-                Automated template emails (Automation tab) are now sent from this mailbox via Microsoft Graph
-                <code className="text-accent"> sendMail</code> — both to data subject requesters and as forwards
-                to internal departments. Every send is still logged on the request's Communications tab and in
-                the audit trail.
+                Automated requester emails open as Outlook drafts from this desktop app and are logged on the
+                request's Communications tab and in the audit trail. Department automations still require a real
+                recipient address before an Outlook draft can be opened.
               </p>
             </div>
           ) : (
@@ -870,10 +870,8 @@ export function SettingsPage() {
                   <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
                     <p className="text-[11px] text-muted">
-                      In the packaged desktop app this opens the Microsoft sign-in consent screen (MSAL) and
-                      requests the <code className="text-accent">Mail.Send</code> scope. This browser preview
-                      can't reach the internet, so the connection is recorded in simulated mode — sends are
-                      logged exactly as they would be delivered.
+                      In the packaged desktop app this uses your default Outlook/mail client to open automated
+                      requester-email drafts. In the browser preview, sends are logged in simulated mode.
                     </p>
                   </div>
                   <div className="flex justify-end gap-2">

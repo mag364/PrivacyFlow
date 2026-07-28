@@ -93,12 +93,14 @@ export interface M365SendMailInput {
   saveToSentItems?: boolean;
 }
 
-export interface M365Bridge {
-  requestDeviceCode: (input: { tenantId?: string; clientId: string; scopes: string[] }) => Promise<M365DeviceCode>;
-  pollDeviceCode: (input: { tenantId?: string; clientId: string; deviceCode: string }) => Promise<M365TokenResult>;
-  refreshToken: (input: { tenantId?: string; clientId: string; refreshToken: string; scopes: string[] }) => Promise<M365TokenResult>;
-  profile: (input: { accessToken: string }) => Promise<M365Profile>;
-  sendMail: (input: M365SendMailInput) => Promise<boolean>;
+export interface OutlookAccount {
+  email: string;
+  displayName?: string;
+}
+
+export interface OutlookBridge {
+  accounts: () => Promise<OutlookAccount[]>;
+  openDraft: (input: MailDraftInput & { accountEmail?: string }) => Promise<boolean>;
 }
 
 const WRITE_STATE: WorkspaceLockState = {
@@ -111,7 +113,7 @@ interface Injected {
   workspace?: WorkspaceBridge;
   updater?: UpdaterBridge;
   mail?: MailBridge;
-  m365?: M365Bridge;
+  outlook?: OutlookBridge;
 }
 
 function injected(): Injected {
@@ -130,8 +132,8 @@ export function mailBridge(): MailBridge | null {
   return injected().mail ?? null;
 }
 
-export function m365Bridge(): M365Bridge | null {
-  return injected().m365 ?? null;
+export function outlookBridge(): OutlookBridge | null {
+  return injected().outlook ?? null;
 }
 
 // Cached lock state, refreshed at startup and on demand by the UI.

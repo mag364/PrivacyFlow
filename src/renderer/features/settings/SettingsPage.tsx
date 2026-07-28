@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import {
   Save, RotateCcw, Check, Mail, Link2, Unlink, ShieldCheck, Info, UserCog, UserPlus,
   KeyRound, Copy, HardDrive, FolderOpen, Lock, Pencil, Palette, Building2, Plug,
-  Database, Trash2,
+  Database, Trash2, RefreshCw, Download, ExternalLink, AlertTriangle, PackageCheck,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { platform } from '../../platform';
@@ -18,6 +18,7 @@ import { fmtDateTime } from '../../lib/format';
 import {
   workspaceBridge, workspaceInfo, chooseWorkspacePath, type WorkspaceInfo,
 } from '../../platform/workspace';
+import { APP_CONFIG } from '@shared/config';
 
 type TabKey = 'workspace' | 'appearance' | 'organization' | 'integrations' | 'users';
 
@@ -52,6 +53,80 @@ function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+type UpdateState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'no_release' }
+  | { status: 'current'; release: GitHubRelease }
+  | { status: 'available'; release: GitHubRelease; assetUrl: string }
+  | { status: 'error'; message: string };
+
+interface GitHubRelease {
+  tag_name: string;
+  name?: string;
+  html_url: string;
+  published_at?: string;
+  prerelease?: boolean;
+  draft?: boolean;
+  assets?: { name: string; browser_download_url: string }[];
+}
+
+const UPDATE_TOKEN_KEY = 'privacyflow.github.updateToken';
+
+function githubHeaders(token: string): HeadersInit {
+  return {
+    Accept: 'application/vnd.github+json',
+    ...(token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {}),
+  };
+}
+
+function normalizeVersion(value: string): number[] {
+  return value
+    .trim()
+    .replace(/^v/i, '')
+    .split(/[.-]/)
+    .slice(0, 3)
+    .map((part) => {
+      const parsed = Number.parseInt(part.replace(/\D+.*/, ''), 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    });
+}
+
+function isNewerVersion(candidate: string, current: string): boolean {
+  const next = normalizeVersion(candidate);
+  const base = normalizeVersion(current);
+  for (let i = 0; i < Math.max(next.length, base.length); i += 1) {
+    const a = next[i] ?? 0;
+    const b = base[i] ?? 0;
+    if (a > b) return true;
+    if (a < b) return false;
+  }
+  return false;
+}
+
+function preferredReleaseAsset(release: GitHubRelease): string {
+  const assets = release.assets ?? [];
+  const preferred = assets.find((asset) => /\.(exe|msi|dmg|pkg|appimage|deb|rpm|zip)$/i.test(asset.name));
+  return preferred?.browser_download_url ?? release.html_url;
+}
+
+function readStoredUpdateToken(): string {
+  try {
+    return localStorage.getItem(UPDATE_TOKEN_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredUpdateToken(token: string): void {
+  try {
+    if (token.trim()) localStorage.setItem(UPDATE_TOKEN_KEY, token.trim());
+    else localStorage.removeItem(UPDATE_TOKEN_KEY);
+  } catch {
+    // Ignore storage errors; the token can still be used for the current check.
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -155,6 +230,156 @@ function StorageSection({ info }: { info: WorkspaceInfo | null }) {
   );
 }
 
+function UpdateSection() {
+  const [state, setState] = React.useState<UpdateState>({ status: 'idle' });
+  const [token, setToken] = React.useState(() => readStoredUpdateToken());
+  const [rememberToken, setRememberToken] = React.useState(() => !!readStoredUpdateToken());
+
+  const currentVersion = APP_CONFIG.version;
+  const release = state.status === 'current' || state.status === 'available' ? state.release : null;
+  const needsTokenHelp = state.status === 'error' && /private repository|access/i.test(state.message);
+
+  async function checkForUpdates() {
+    setState({ status: 'checking' });
+    try {
+      const trimmedToken = token.trim();
+      const res = await fetch(APP_CONFIG.updates.latestReleaseUrl, {
+        headers: githubHeaders(trimmedToken),
+      });
+
+      if (res.status === 404) {
+        const releasesRes = await fetch(APP_CONFIG.updates.releasesApiUrl, {
+          headers: githubHeaders(trimmedToken),
+        });
+        if (releasesRes.ok) {
+          const releases = await releasesRes.json() as GitHubRelease[];
+          if (Array.isArray(releases) && releases.length === 0) {
+            if (rememberToken) writeStoredUpdateToken(trimmedToken);
+            else writeStoredUpdateToken('');
+            setState({ status: 'no_release' });
+            return;
+          }
+        }
+      }
+
+      if (res.status === 401 || res.status === 403 || res.status === 404) {
+        throw new Error(
+          'Unable to read GitHub releases. This is a private repository, so provide a fine-grained GitHub token with repository Contents read access.',
+        );
+      }
+      if (!res.ok) throw new Error(`GitHub release check failed with HTTP ${res.status}.`);
+
+      const latest = await res.json() as GitHubRelease;
+      if (!latest.tag_name || latest.draft) throw new Error('No published release was found.');
+      if (rememberToken) writeStoredUpdateToken(trimmedToken);
+      else writeStoredUpdateToken('');
+
+      if (isNewerVersion(latest.tag_name, currentVersion)) {
+        setState({ status: 'available', release: latest, assetUrl: preferredReleaseAsset(latest) });
+      } else {
+        setState({ status: 'current', release: latest });
+      }
+    } catch (e) {
+      setState({ status: 'error', message: e instanceof Error ? e.message : 'Unable to check for updates.' });
+    }
+  }
+
+  function openRelease() {
+    const url = state.status === 'available' ? state.assetUrl : release?.html_url ?? APP_CONFIG.updates.releasesUrl;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-line px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <PackageCheck className="h-4 w-4 text-accent" />
+          <div>
+            <h4 className="text-sm font-semibold text-ink">Update</h4>
+            <p className="text-xs text-muted">Current version {currentVersion}</p>
+          </div>
+        </div>
+        {state.status === 'available' && <GlassBadge tone="warn">Update available</GlassBadge>}
+        {state.status === 'current' && <GlassBadge tone="success">Up to date</GlassBadge>}
+        {state.status === 'no_release' && <GlassBadge tone="neutral">No releases</GlassBadge>}
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+        <Field
+          label="GitHub token"
+          hint="Required for private repository release checks. Stored only in this browser when Remember is enabled."
+        >
+          <GlassInput
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="github_pat_…"
+            autoComplete="off"
+          />
+        </Field>
+        <label className="flex items-center gap-2 self-end rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            className="h-4 w-4 focus-ring"
+            checked={rememberToken}
+            onChange={(e) => {
+              setRememberToken(e.target.checked);
+              if (!e.target.checked) writeStoredUpdateToken('');
+            }}
+          />
+          Remember
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <GlassButton loading={state.status === 'checking'} onClick={checkForUpdates}>
+          <RefreshCw className="h-4 w-4" /> Check for updates
+        </GlassButton>
+        <GlassButton
+          variant={state.status === 'available' ? 'primary' : 'subtle'}
+          onClick={openRelease}
+          disabled={state.status === 'checking'}
+        >
+          {state.status === 'available' ? <Download className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
+          {state.status === 'available' ? 'Update application' : 'Open releases'}
+        </GlassButton>
+      </div>
+
+      {release && (
+        <div className="rounded-xl bg-[var(--pf-highlight)] px-3 py-2 text-xs text-muted">
+          Latest release: <span className="font-semibold text-ink">{release.tag_name}</span>
+          {release.name ? ` · ${release.name}` : ''}
+          {release.published_at ? ` · Published ${fmtDateTime(release.published_at)}` : ''}
+        </div>
+      )}
+
+      {state.status === 'no_release' && (
+        <div className="rounded-xl bg-[var(--pf-highlight)] px-3 py-2 text-xs text-muted">
+          No published GitHub releases exist for {APP_CONFIG.updates.owner}/{APP_CONFIG.updates.repo} yet.
+          Publish a release with a version tag such as v{currentVersion}, then this checker can compare future releases.
+        </div>
+      )}
+
+      {state.status === 'error' && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
+          <p className="text-xs text-red-200">
+            {state.message}
+            {needsTokenHelp ? ' The token only needs access to this repository and Contents: Read-only for checking releases.' : ''}
+          </p>
+        </div>
+      )}
+
+      {state.status === 'available' && (
+        <p className="text-[11px] text-muted">
+          The update button opens the newest GitHub release or package asset. Install the downloaded
+          desktop package, then relaunch PrivacyFlow.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // -----------------------------------------------------------------------------
 // Workspace section: shared database location, lock holder, and storage usage.
 // -----------------------------------------------------------------------------
@@ -247,6 +472,10 @@ function WorkspaceTab() {
 
       <GlassPanel>
         <StorageSection info={info} />
+      </GlassPanel>
+
+      <GlassPanel>
+        <UpdateSection />
       </GlassPanel>
     </div>
   );

@@ -1,10 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldHalf, AlertCircle, KeyRound, Info } from 'lucide-react';
+import { AlertCircle, KeyRound, Info } from 'lucide-react';
 import { useAuth } from '../../store/auth';
 import { APP_CONFIG } from '@shared/config';
 import { PASSWORD_MIN_LENGTH } from '@shared/password';
 import { GlassButton, GlassInput, GlassPanel, Field } from '../../components/glass';
+import privacyFlowIcon from '../../assets/privacyflow-icon.png';
 
 export function LoginPage() {
   const {
@@ -101,9 +102,7 @@ export function LoginPage() {
       <div className="grid w-full max-w-4xl gap-6 lg:grid-cols-2">
         <div className="hidden flex-col justify-between rounded-glass border border-line bg-[var(--pf-surface)] p-8 backdrop-blur-xl lg:flex">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-accent text-accent-ink">
-              <ShieldHalf className="h-5 w-5" />
-            </div>
+            <img src={privacyFlowIcon} alt="" className="h-11 w-11 rounded-2xl object-cover shadow-glass" />
             <div>
               <p className="text-lg font-bold text-ink">{APP_CONFIG.productName}</p>
               <p className="text-xs text-muted">{APP_CONFIG.tagline}</p>

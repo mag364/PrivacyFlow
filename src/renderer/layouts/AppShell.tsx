@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import {
   LayoutDashboard, FolderKanban, ListChecks, BarChart3, Workflow,
-  Bell, ShieldCheck, Settings, LogOut, ShieldHalf, Plus, Lock, RefreshCw, KeyRound, X,
+  Bell, ShieldCheck, Settings, LogOut, Plus, Lock, RefreshCw, KeyRound, X,
   ChevronDown, CalendarDays, PlusCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -13,6 +13,7 @@ import { ROLE_LABELS } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
 import { GlassButton, GlassInput } from '../components/glass';
 import { initials, fmtDateTime } from '../lib/format';
+import privacyFlowIcon from '../assets/privacyflow-icon.png';
 import {
   currentLockState, refreshLockState, recheckLock, claimStaleLock, workspaceBridge,
   type WorkspaceLockState,
@@ -358,9 +359,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-64 flex-col gap-2 border-r border-line bg-[var(--pf-surface)] px-4 py-6 backdrop-blur-xl md:flex">
         <div className="mb-6 flex items-center gap-3 px-2">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-accent text-accent-ink">
-            <ShieldHalf className="h-5 w-5" />
-          </div>
+          <img src={privacyFlowIcon} alt="" className="h-10 w-10 rounded-2xl object-cover shadow-glass" />
           <div>
             <p className="text-sm font-bold text-ink">{APP_CONFIG.productName}</p>
             <p className="text-[11px] text-muted">{APP_CONFIG.tagline}</p>
@@ -452,9 +451,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-[var(--pf-surface)] px-6 py-3 backdrop-blur-xl md:hidden">
-          <div className="grid h-8 w-8 place-items-center rounded-xl bg-accent text-accent-ink">
-            <ShieldHalf className="h-4 w-4" />
-          </div>
+          <img src={privacyFlowIcon} alt="" className="h-8 w-8 rounded-xl object-cover shadow-glass" />
           <span className="text-sm font-bold text-ink">{APP_CONFIG.productName}</span>
           {readOnly && (
             <span className="flex items-center gap-1 rounded-capsule border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">

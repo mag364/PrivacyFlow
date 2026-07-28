@@ -1,10 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Rocket } from 'lucide-react';
 import { platform } from '../../platform';
 import { JURISDICTIONS } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
 import { GlassButton, GlassInput, GlassSelect, GlassPanel, Field } from '../../components/glass';
+import privacyFlowIcon from '../../assets/privacyflow-icon.png';
 
 export function SetupPage({ onDone }: { onDone?: () => void }) {
   const navigate = useNavigate();
@@ -28,9 +28,7 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
     <div className="flex min-h-screen items-center justify-center p-6">
       <GlassPanel className="w-full max-w-lg p-7">
         <div className="mb-5 flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-accent text-accent-ink">
-            <Rocket className="h-5 w-5" />
-          </div>
+          <img src={privacyFlowIcon} alt="" className="h-11 w-11 rounded-2xl object-cover shadow-glass" />
           <div>
             <h1 className="text-xl font-bold text-ink">Welcome to {APP_CONFIG.productName}</h1>
             <p className="text-sm text-muted">A few details to configure your workspace.</p>

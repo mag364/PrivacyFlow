@@ -49,6 +49,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 720,
     backgroundColor: '#0b1020',
+    icon: path.join(__dirname, '../../assets/privacyflow-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

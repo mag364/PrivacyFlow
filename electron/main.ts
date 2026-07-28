@@ -27,6 +27,7 @@ import os from 'node:os';
 import { WorkspaceLock, type LockState } from './lockfile';
 
 const isDev = !app.isPackaged;
+const M365_SCOPES = ['offline_access', 'User.Read', 'Mail.Send'];
 
 function safeFileName(value: string): string {
   const cleaned = String(value || 'PrivacyFlow-update.exe').replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').trim();
@@ -42,6 +43,33 @@ function uniqueDownloadPath(fileName: string): string {
     index += 1;
   }
   return candidate;
+}
+
+function tenantSegment(value?: string): string {
+  return String(value || '').trim() || 'common';
+}
+
+function formBody(values: Record<string, string | string[]>): URLSearchParams {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    body.set(key, Array.isArray(value) ? value.join(' ') : value);
+  }
+  return body;
+}
+
+async function readJsonResponse(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) as Record<string, unknown> : {};
+  } catch {
+    return { error_description: text };
+  }
+}
+
+function microsoftError(payload: Record<string, unknown>, fallback: string): Error {
+  return new Error(
+    String(payload.error_description || payload.error || payload.message || fallback),
+  );
 }
 
 function resolveDbPath(): string {
@@ -174,6 +202,94 @@ ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; subject?: stri
   const body = encodeURIComponent(String(input?.body || ''));
   const url = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
   return shell.openExternal(url);
+});
+
+ipcMain.handle('m365:requestDeviceCode', async (_e, input: { tenantId?: string; clientId?: string; scopes?: string[] }) => {
+  const clientId = String(input?.clientId || '').trim();
+  if (!clientId) throw new Error('Microsoft Entra application client ID is required.');
+  const scopes = Array.isArray(input?.scopes) && input.scopes.length ? input.scopes : M365_SCOPES;
+  const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantSegment(input?.tenantId))}/oauth2/v2.0/devicecode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody({ client_id: clientId, scope: scopes }),
+  });
+  const payload = await readJsonResponse(res);
+  if (!res.ok) throw microsoftError(payload, `Microsoft device-code request failed with HTTP ${res.status}.`);
+  shell.openExternal(String(payload.verification_uri || 'https://microsoft.com/devicelogin'));
+  return payload;
+});
+
+ipcMain.handle('m365:pollDeviceCode', async (_e, input: { tenantId?: string; clientId?: string; deviceCode?: string }) => {
+  const clientId = String(input?.clientId || '').trim();
+  const deviceCode = String(input?.deviceCode || '').trim();
+  if (!clientId || !deviceCode) throw new Error('Microsoft device-code polling requires a client ID and device code.');
+  const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantSegment(input?.tenantId))}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody({
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: clientId,
+      device_code: deviceCode,
+    }),
+  });
+  const payload = await readJsonResponse(res);
+  if (!res.ok) throw microsoftError(payload, `Microsoft token request failed with HTTP ${res.status}.`);
+  return payload;
+});
+
+ipcMain.handle('m365:refreshToken', async (_e, input: { tenantId?: string; clientId?: string; refreshToken?: string; scopes?: string[] }) => {
+  const clientId = String(input?.clientId || '').trim();
+  const refreshToken = String(input?.refreshToken || '').trim();
+  if (!clientId || !refreshToken) throw new Error('Microsoft token refresh requires a client ID and refresh token.');
+  const scopes = Array.isArray(input?.scopes) && input.scopes.length ? input.scopes : M365_SCOPES;
+  const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantSegment(input?.tenantId))}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      refresh_token: refreshToken,
+      scope: scopes,
+    }),
+  });
+  const payload = await readJsonResponse(res);
+  if (!res.ok) throw microsoftError(payload, `Microsoft token refresh failed with HTTP ${res.status}.`);
+  return payload;
+});
+
+ipcMain.handle('m365:profile', async (_e, input: { accessToken?: string }) => {
+  const token = String(input?.accessToken || '').trim();
+  if (!token) throw new Error('Microsoft profile lookup requires an access token.');
+  const res = await fetch('https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const payload = await readJsonResponse(res);
+  if (!res.ok) throw microsoftError(payload, `Microsoft Graph profile lookup failed with HTTP ${res.status}.`);
+  return payload;
+});
+
+ipcMain.handle('m365:sendMail', async (_e, input: { accessToken?: string; to?: string; subject?: string; body?: string; saveToSentItems?: boolean }) => {
+  const token = String(input?.accessToken || '').trim();
+  const to = String(input?.to || '').trim();
+  if (!token) throw new Error('Microsoft Graph sendMail requires an access token.');
+  if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: {
+        subject: String(input?.subject || ''),
+        body: { contentType: 'Text', content: String(input?.body || '') },
+        toRecipients: [{ emailAddress: { address: to } }],
+      },
+      saveToSentItems: input?.saveToSentItems !== false,
+    }),
+  });
+  if (!res.ok) throw microsoftError(await readJsonResponse(res), `Microsoft Graph sendMail failed with HTTP ${res.status}.`);
+  return true;
 });
 
 app.whenReady().then(() => {

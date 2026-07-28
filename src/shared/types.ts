@@ -280,6 +280,10 @@ export interface M365Integration {
   connectedAt?: string;
   connectedBy?: string;
   mode: 'graph' | 'outlook' | 'simulated';
+  clientId?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: string;
 }
 
 export interface OrgSettings {

@@ -17,6 +17,7 @@ import { useAuth, can } from '../../store/auth';
 import { fmtDateTime } from '../../lib/format';
 import {
   workspaceBridge, updaterBridge, workspaceInfo, chooseWorkspacePath, type WorkspaceInfo,
+  m365Bridge, mailBridge,
 } from '../../platform/workspace';
 import { APP_CONFIG } from '@shared/config';
 
@@ -83,6 +84,7 @@ interface GitHubRelease {
 }
 
 const UPDATE_TOKEN_KEY = 'privacyflow.github.updateToken';
+const M365_SCOPES = ['offline_access', 'User.Read', 'Mail.Send'];
 
 function githubHeaders(token: string): HeadersInit {
   return {
@@ -570,7 +572,11 @@ export function SettingsPage() {
   const [connecting, setConnecting] = React.useState(false);
   const [m365Email, setM365Email] = React.useState('');
   const [m365Tenant, setM365Tenant] = React.useState('');
+  const [m365ClientId, setM365ClientId] = React.useState('');
   const [m365Error, setM365Error] = React.useState('');
+  const [m365AuthMessage, setM365AuthMessage] = React.useState('');
+  const [m365TestBusy, setM365TestBusy] = React.useState(false);
+  const [m365TestResult, setM365TestResult] = React.useState('');
 
   // Add-user form state
   const [addingUser, setAddingUser] = React.useState(false);
@@ -683,11 +689,79 @@ export function SettingsPage() {
   }
 
   async function connectM365() {
+    const bridge = m365Bridge();
+    const isDesktop = !!workspaceBridge();
     if (!/.+@.+\..+/.test(m365Email)) {
       setM365Error('Enter a valid Microsoft 365 mailbox address (e.g. privacy@contoso.com).');
       return;
     }
     setM365Error('');
+    setM365AuthMessage('');
+
+    if (isDesktop && bridge) {
+      const clientId = m365ClientId.trim();
+      if (!clientId) {
+        setM365Error('Enter the Microsoft Entra application (client) ID before connecting.');
+        return;
+      }
+      try {
+        const device = await bridge.requestDeviceCode({
+          tenantId: m365Tenant.trim() || undefined,
+          clientId,
+          scopes: M365_SCOPES,
+        });
+        setM365AuthMessage(device.message || `Sign in at ${device.verification_uri} with code ${device.user_code}.`);
+        const deadline = Date.now() + device.expires_in * 1000;
+        let interval = Math.max(1, device.interval || 5);
+        let token = null;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, interval * 1000));
+          try {
+            token = await bridge.pollDeviceCode({
+              tenantId: m365Tenant.trim() || undefined,
+              clientId,
+              deviceCode: device.device_code,
+            });
+            break;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : '';
+            if (/authorization_pending/i.test(msg)) continue;
+            if (/slow_down/i.test(msg)) {
+              interval += 5;
+              continue;
+            }
+            throw e;
+          }
+        }
+        if (!token) throw new Error('Microsoft sign-in timed out. Start Connect again and complete the browser prompt.');
+        const profile = await bridge.profile({ accessToken: token.access_token });
+        const accountEmail = profile.mail || profile.userPrincipalName || m365Email.trim();
+        const s = await platform().system.updateSettings({
+          m365: {
+            connected: true,
+            accountEmail,
+            tenantId: m365Tenant.trim() || undefined,
+            connectedAt: new Date().toISOString(),
+            connectedBy: user?.name,
+            mode: 'graph',
+            clientId,
+            accessToken: token.access_token,
+            refreshToken: token.refresh_token,
+            expiresAt: new Date(Date.now() + Math.max(60, token.expires_in) * 1000).toISOString(),
+          },
+        });
+        setSettings(s);
+        setConnecting(false);
+        setM365Email('');
+        setM365Tenant('');
+        setM365ClientId('');
+        setM365AuthMessage('');
+      } catch (e) {
+        setM365Error(e instanceof Error ? e.message : 'Microsoft 365 sign-in failed.');
+      }
+      return;
+    }
+
     const s = await platform().system.updateSettings({
       m365: {
         connected: true,
@@ -702,12 +776,67 @@ export function SettingsPage() {
     setConnecting(false);
     setM365Email('');
     setM365Tenant('');
+    setM365ClientId('');
   }
 
   async function disconnectM365() {
     if (!window.confirm('Disconnect Microsoft 365? Automated emails will be logged locally instead of sent.')) return;
     const s = await platform().system.updateSettings({ m365: { connected: false, mode: 'simulated' } });
     setSettings(s);
+  }
+
+  async function testM365Connection() {
+    if (!m365.connected || !m365.accountEmail) return;
+    setM365TestBusy(true);
+    setM365TestResult('');
+    setM365Error('');
+    try {
+      const bridge = m365Bridge();
+      if (m365.mode === 'graph') {
+        if (!bridge || !m365.accessToken) throw new Error('Microsoft Graph connection is missing. Reconnect Microsoft 365.');
+        let accessToken = m365.accessToken;
+        if (m365.expiresAt && Date.parse(m365.expiresAt) <= Date.now() + 60_000 && m365.refreshToken && m365.clientId) {
+          const refreshed = await bridge.refreshToken({
+            tenantId: m365.tenantId,
+            clientId: m365.clientId,
+            refreshToken: m365.refreshToken,
+            scopes: M365_SCOPES,
+          });
+          accessToken = refreshed.access_token;
+          const updated = await platform().system.updateSettings({
+            m365: {
+              ...m365,
+              accessToken,
+              refreshToken: refreshed.refresh_token ?? m365.refreshToken,
+              expiresAt: new Date(Date.now() + Math.max(60, refreshed.expires_in) * 1000).toISOString(),
+            },
+          });
+          setSettings(updated);
+        }
+        await bridge.sendMail({
+          accessToken,
+          to: m365.accountEmail,
+          subject: `PrivacyFlow Microsoft 365 test (${new Date().toLocaleString()})`,
+          body: 'This is a PrivacyFlow Microsoft 365 connection test.',
+        });
+        setM365TestResult(`Test email sent to ${m365.accountEmail}.`);
+      } else if (m365.mode === 'outlook') {
+        const bridge = mailBridge();
+        if (!bridge) throw new Error('Outlook draft bridge is unavailable.');
+        await bridge.openDraft({
+          to: m365.accountEmail,
+          subject: `PrivacyFlow Outlook draft test (${new Date().toLocaleString()})`,
+          body: 'This is a PrivacyFlow Outlook draft connection test.',
+        });
+        setM365TestResult(`Opened a test draft to ${m365.accountEmail}.`);
+      } else {
+        setM365TestResult('Browser preview is in simulated mode. No email was sent.');
+      }
+    } catch (e) {
+      setM365Error(e instanceof Error ? e.message : 'Microsoft 365 test failed.');
+    } finally {
+      setM365TestBusy(false);
+    }
   }
 
   return (
@@ -816,28 +945,36 @@ export function SettingsPage() {
                   <p className="text-xs text-muted">
                     Connected {fmtDateTime(m365.connectedAt)}{m365.connectedBy ? ` by ${m365.connectedBy}` : ''}
                     {m365.tenantId ? ` · Tenant ${m365.tenantId}` : ''}
+                    {m365.mode === 'graph' ? ' · Microsoft Graph sendMail' : ''}
                     {m365.mode === 'outlook' ? ' · Outlook desktop drafts' : ''}
                     {m365.mode === 'simulated' ? ' · Simulated delivery (browser preview)' : ''}
                   </p>
                 </div>
                 {editable && (
-                  <GlassButton variant="ghost" onClick={disconnectM365}>
-                    <Unlink className="h-4 w-4" /> Disconnect
-                  </GlassButton>
+                  <div className="flex flex-wrap gap-2">
+                    <GlassButton variant="subtle" loading={m365TestBusy} onClick={testM365Connection}>
+                      <Mail className="h-4 w-4" /> Test connection
+                    </GlassButton>
+                    <GlassButton variant="ghost" onClick={disconnectM365}>
+                      <Unlink className="h-4 w-4" /> Disconnect
+                    </GlassButton>
+                  </div>
                 )}
               </div>
+              {m365TestResult && <p className="text-xs text-emerald-300">{m365TestResult}</p>}
+              {m365Error && <p className="text-xs text-red-400">{m365Error}</p>}
               <p className="text-xs text-muted">
-                Automated requester emails open as Outlook drafts from this desktop app and are logged on the
-                request's Communications tab and in the audit trail. Department automations still require a real
-                recipient address before an Outlook draft can be opened.
+                {m365.mode === 'graph'
+                  ? 'Automated requester emails are sent through Microsoft Graph sendMail and logged on the request Communications tab and audit trail.'
+                  : 'Automated requester emails open as Outlook drafts from this desktop app and are logged on the request Communications tab and audit trail.'}
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted">
                 Connect a Microsoft 365 mailbox so automated template emails (request acknowledgements,
-                identity-verification requests, department search forwards, fulfilment notices) are actually
-                sent and forwarded from Outlook instead of only being logged.
+                identity-verification requests, department search forwards, fulfilment notices) can be sent
+                through Microsoft Graph from the connected mailbox.
               </p>
 
               {!connecting ? (
@@ -866,12 +1003,25 @@ export function SettingsPage() {
                       onChange={(e) => setM365Tenant(e.target.value)}
                     />
                   </Field>
+                  <Field label="Application (client) ID" hint="Required in the portable desktop app. The app registration needs delegated Microsoft Graph permissions: User.Read and Mail.Send.">
+                    <GlassInput
+                      placeholder="e.g. 00000000-0000-0000-0000-000000000000"
+                      value={m365ClientId}
+                      onChange={(e) => setM365ClientId(e.target.value)}
+                    />
+                  </Field>
                   {m365Error && <p className="text-xs text-red-400">{m365Error}</p>}
+                  {m365AuthMessage && (
+                    <div className="rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-ink">
+                      {m365AuthMessage}
+                    </div>
+                  )}
                   <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
                     <p className="text-[11px] text-muted">
-                      In the packaged desktop app this uses your default Outlook/mail client to open automated
-                      requester-email drafts. In the browser preview, sends are logged in simulated mode.
+                      In the packaged desktop app, Connect opens Microsoft sign-in in your browser using
+                      device-code authentication. The app requests delegated User.Read and Mail.Send permissions.
+                      Browser preview records simulated delivery only.
                     </p>
                   </div>
                   <div className="flex justify-end gap-2">

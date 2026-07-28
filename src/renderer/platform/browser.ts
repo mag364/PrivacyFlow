@@ -18,7 +18,7 @@ import {
   type Db, appendAudit, createSeed, nextActionFor, nextCaseNumber, nextProjectNumber,
   uid, fakeHash,
 } from './seed';
-import { workspaceBridge, isReadOnly, mailBridge } from './workspace';
+import { workspaceBridge, isReadOnly, mailBridge, m365Bridge } from './workspace';
 
 // -----------------------------------------------------------------------------
 // Persistence-backed implementation of PrivacyFlowAPI.
@@ -265,6 +265,28 @@ function renderTemplate(text: string, c: DsrCase, orgName: string, department?: 
   return text.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (m, key) => map[key] ?? m);
 }
 
+const M365_SCOPES = ['offline_access', 'User.Read', 'Mail.Send'];
+
+async function graphToken(d: Db): Promise<string | null> {
+  const bridge = m365Bridge();
+  const m365 = d.settings.m365;
+  if (!bridge || m365?.mode !== 'graph' || !m365.accessToken) return null;
+  const expiresAt = m365.expiresAt ? Date.parse(m365.expiresAt) : 0;
+  if (expiresAt > Date.now() + 60_000) return m365.accessToken;
+  if (!m365.refreshToken || !m365.clientId) return m365.accessToken;
+
+  const refreshed = await bridge.refreshToken({
+    tenantId: m365.tenantId,
+    clientId: m365.clientId,
+    refreshToken: m365.refreshToken,
+    scopes: M365_SCOPES,
+  });
+  m365.accessToken = refreshed.access_token;
+  m365.refreshToken = refreshed.refresh_token ?? m365.refreshToken;
+  m365.expiresAt = new Date(Date.now() + Math.max(60, refreshed.expires_in) * 1000).toISOString();
+  return m365.accessToken;
+}
+
 async function runAutomations(
   d: Db,
   c: DsrCase,
@@ -299,8 +321,21 @@ async function runAutomations(
     const subject = renderTemplate(tpl.subject, c, d.settings.organizationName, tpl.department);
     const body = renderTemplate(tpl.body, c, d.settings.organizationName, tpl.department);
     const now = new Date().toISOString();
+    const graph = m365?.mode === 'graph' ? m365Bridge() : null;
     const draftBridge = m365?.mode === 'outlook' ? mailBridge() : null;
     const canOpenDraft = !!draftBridge && /.+@.+\..+/.test(recipient);
+    let deliveryNote = '';
+
+    if (graph && /.+@.+\..+/.test(recipient)) {
+      const token = await graphToken(d);
+      if (token) {
+        await graph.sendMail({ accessToken: token, to: recipient, subject, body });
+      } else {
+        deliveryNote = '\n\nMicrosoft Graph send was skipped because the access token is missing. Reconnect Microsoft 365 in Settings.';
+      }
+    } else if (graph) {
+      deliveryNote = '\n\nMicrosoft Graph send was skipped because this automation target does not have an email address.';
+    }
 
     if (draftBridge && canOpenDraft) {
       await draftBridge.openDraft({ to: recipient, subject, body });
@@ -312,7 +347,7 @@ async function runAutomations(
       direction: 'Outbound',
       channel: viaM365 ? 'Email (Microsoft 365)' : 'Email',
       subject,
-      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipient}${draftBridge && !canOpenDraft ? '\n\nOutlook draft was not opened because this automation target does not have an email address.' : ''}\n\n${body}`,
+      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipient}${deliveryNote}${draftBridge && !canOpenDraft ? '\n\nOutlook draft was not opened because this automation target does not have an email address.' : ''}\n\n${body}`,
       sentAt: now,
       status: sendStatus,
       createdBy: 'automation',

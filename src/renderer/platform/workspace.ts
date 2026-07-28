@@ -62,6 +62,45 @@ export interface MailBridge {
   openDraft: (input: MailDraftInput) => Promise<boolean>;
 }
 
+export interface M365DeviceCode {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+  message: string;
+}
+
+export interface M365TokenResult {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  token_type: string;
+  scope?: string;
+}
+
+export interface M365Profile {
+  displayName?: string;
+  mail?: string;
+  userPrincipalName?: string;
+}
+
+export interface M365SendMailInput {
+  accessToken: string;
+  to: string;
+  subject: string;
+  body: string;
+  saveToSentItems?: boolean;
+}
+
+export interface M365Bridge {
+  requestDeviceCode: (input: { tenantId?: string; clientId: string; scopes: string[] }) => Promise<M365DeviceCode>;
+  pollDeviceCode: (input: { tenantId?: string; clientId: string; deviceCode: string }) => Promise<M365TokenResult>;
+  refreshToken: (input: { tenantId?: string; clientId: string; refreshToken: string; scopes: string[] }) => Promise<M365TokenResult>;
+  profile: (input: { accessToken: string }) => Promise<M365Profile>;
+  sendMail: (input: M365SendMailInput) => Promise<boolean>;
+}
+
 const WRITE_STATE: WorkspaceLockState = {
   mode: 'write',
   info: { user: '', machine: '', pid: 0, since: '', heartbeat: '' },
@@ -72,6 +111,7 @@ interface Injected {
   workspace?: WorkspaceBridge;
   updater?: UpdaterBridge;
   mail?: MailBridge;
+  m365?: M365Bridge;
 }
 
 function injected(): Injected {
@@ -88,6 +128,10 @@ export function updaterBridge(): UpdaterBridge | null {
 
 export function mailBridge(): MailBridge | null {
   return injected().mail ?? null;
+}
+
+export function m365Bridge(): M365Bridge | null {
+  return injected().m365 ?? null;
 }
 
 // Cached lock state, refreshed at startup and on demand by the UI.

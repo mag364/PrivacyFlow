@@ -26,4 +26,15 @@ contextBridge.exposeInMainWorld('privacyflow', {
   mail: {
     openDraft: (input: { to: string; subject: string; body: string }) => ipcRenderer.invoke('mail:openDraft', input),
   },
+  m365: {
+    requestDeviceCode: (input: { tenantId?: string; clientId: string; scopes: string[] }) =>
+      ipcRenderer.invoke('m365:requestDeviceCode', input),
+    pollDeviceCode: (input: { tenantId?: string; clientId: string; deviceCode: string }) =>
+      ipcRenderer.invoke('m365:pollDeviceCode', input),
+    refreshToken: (input: { tenantId?: string; clientId: string; refreshToken: string; scopes: string[] }) =>
+      ipcRenderer.invoke('m365:refreshToken', input),
+    profile: (input: { accessToken: string }) => ipcRenderer.invoke('m365:profile', input),
+    sendMail: (input: { accessToken: string; to: string; subject: string; body: string; saveToSentItems?: boolean }) =>
+      ipcRenderer.invoke('m365:sendMail', input),
+  },
 });

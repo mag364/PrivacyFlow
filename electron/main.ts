@@ -20,13 +20,29 @@
 // at runtime from Settings → Workspace.
 // -----------------------------------------------------------------------------
 
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { WorkspaceLock, type LockState } from './lockfile';
 
 const isDev = !app.isPackaged;
+
+function safeFileName(value: string): string {
+  const cleaned = String(value || 'PrivacyFlow-update.exe').replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').trim();
+  return cleaned || 'PrivacyFlow-update.exe';
+}
+
+function uniqueDownloadPath(fileName: string): string {
+  const parsed = path.parse(safeFileName(fileName));
+  let candidate = path.join(app.getPath('downloads'), `${parsed.name}${parsed.ext}`);
+  let index = 1;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(app.getPath('downloads'), `${parsed.name} (${index})${parsed.ext}`);
+    index += 1;
+  }
+  return candidate;
+}
 
 function resolveDbPath(): string {
   const shared = process.env.PRIVACYFLOW_WORKSPACE;
@@ -124,6 +140,31 @@ ipcMain.handle('workspace:choosePath', async () => {
   lock = new WorkspaceLock(dbPath, os.userInfo().username);
   lockState = lock.acquire();
   return { dbPath, lockState, changed: true };
+});
+
+ipcMain.handle('updater:downloadReleaseAsset', async (_e, input: { assetApiUrl?: string; token?: string; fileName?: string }) => {
+  const assetApiUrl = String(input?.assetApiUrl || '').trim();
+  const token = String(input?.token || '').trim();
+  if (!assetApiUrl || !assetApiUrl.startsWith('https://api.github.com/')) {
+    throw new Error('A valid GitHub release asset URL is required.');
+  }
+  if (!token) throw new Error('A GitHub token is required to download updates from the private repository.');
+
+  const res = await fetch(assetApiUrl, {
+    headers: {
+      Accept: 'application/octet-stream',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!res.ok) throw new Error(`Update download failed with HTTP ${res.status}.`);
+
+  const filePath = uniqueDownloadPath(input?.fileName || 'PrivacyFlow-update.exe');
+  const buffer = Buffer.from(await res.arrayBuffer());
+  fs.writeFileSync(filePath, buffer);
+  shell.showItemInFolder(filePath);
+  const openError = await shell.openPath(filePath);
+  return { filePath, opened: !openError };
 });
 
 app.whenReady().then(() => {

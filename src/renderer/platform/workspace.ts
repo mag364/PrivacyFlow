@@ -27,6 +27,17 @@ export interface ChoosePathResult {
   changed: boolean;
 }
 
+export interface DownloadUpdateInput {
+  assetApiUrl: string;
+  token: string;
+  fileName: string;
+}
+
+export interface DownloadUpdateResult {
+  filePath: string;
+  opened: boolean;
+}
+
 export interface WorkspaceBridge {
   read: () => string | null;
   write: (json: string) => Promise<boolean>;
@@ -37,6 +48,10 @@ export interface WorkspaceBridge {
   choosePath?: () => Promise<ChoosePathResult | null>;
 }
 
+export interface UpdaterBridge {
+  downloadReleaseAsset: (input: DownloadUpdateInput) => Promise<DownloadUpdateResult>;
+}
+
 const WRITE_STATE: WorkspaceLockState = {
   mode: 'write',
   info: { user: '', machine: '', pid: 0, since: '', heartbeat: '' },
@@ -45,6 +60,7 @@ const WRITE_STATE: WorkspaceLockState = {
 interface Injected {
   isElectron?: boolean;
   workspace?: WorkspaceBridge;
+  updater?: UpdaterBridge;
 }
 
 function injected(): Injected {
@@ -53,6 +69,10 @@ function injected(): Injected {
 
 export function workspaceBridge(): WorkspaceBridge | null {
   return injected().workspace ?? null;
+}
+
+export function updaterBridge(): UpdaterBridge | null {
+  return injected().updater ?? null;
 }
 
 // Cached lock state, refreshed at startup and on demand by the UI.

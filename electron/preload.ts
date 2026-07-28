@@ -19,4 +19,8 @@ contextBridge.exposeInMainWorld('privacyflow', {
     info: () => ipcRenderer.invoke('workspace:info'),
     choosePath: () => ipcRenderer.invoke('workspace:choosePath'),
   },
+  updater: {
+    downloadReleaseAsset: (input: { assetApiUrl: string; token: string; fileName: string }) =>
+      ipcRenderer.invoke('updater:downloadReleaseAsset', input),
+  },
 });

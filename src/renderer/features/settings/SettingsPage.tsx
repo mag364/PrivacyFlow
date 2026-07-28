@@ -16,7 +16,7 @@ import { useTheme } from '../../store/theme';
 import { useAuth, can } from '../../store/auth';
 import { fmtDateTime } from '../../lib/format';
 import {
-  workspaceBridge, workspaceInfo, chooseWorkspacePath, type WorkspaceInfo,
+  workspaceBridge, updaterBridge, workspaceInfo, chooseWorkspacePath, type WorkspaceInfo,
 } from '../../platform/workspace';
 import { APP_CONFIG } from '@shared/config';
 
@@ -58,10 +58,19 @@ function fmtBytes(bytes: number): string {
 type UpdateState =
   | { status: 'idle' }
   | { status: 'checking' }
+  | { status: 'downloading'; release: GitHubRelease; asset: GitHubReleaseAsset }
+  | { status: 'downloaded'; release: GitHubRelease; fileName: string }
   | { status: 'no_release' }
   | { status: 'current'; release: GitHubRelease }
-  | { status: 'available'; release: GitHubRelease; assetUrl: string }
+  | { status: 'available'; release: GitHubRelease; asset: GitHubReleaseAsset }
   | { status: 'error'; message: string };
+
+interface GitHubReleaseAsset {
+  name: string;
+  url: string;
+  browser_download_url: string;
+  size?: number;
+}
 
 interface GitHubRelease {
   tag_name: string;
@@ -70,7 +79,7 @@ interface GitHubRelease {
   published_at?: string;
   prerelease?: boolean;
   draft?: boolean;
-  assets?: { name: string; browser_download_url: string }[];
+  assets?: GitHubReleaseAsset[];
 }
 
 const UPDATE_TOKEN_KEY = 'privacyflow.github.updateToken';
@@ -106,10 +115,10 @@ function isNewerVersion(candidate: string, current: string): boolean {
   return false;
 }
 
-function preferredReleaseAsset(release: GitHubRelease): string {
+function preferredReleaseAsset(release: GitHubRelease): GitHubReleaseAsset | null {
   const assets = release.assets ?? [];
   const preferred = assets.find((asset) => /\.(exe|msi|dmg|pkg|appimage|deb|rpm|zip)$/i.test(asset.name));
-  return preferred?.browser_download_url ?? release.html_url;
+  return preferred ?? assets[0] ?? null;
 }
 
 function readStoredUpdateToken(): string {
@@ -236,7 +245,13 @@ function UpdateSection() {
   const [rememberToken, setRememberToken] = React.useState(() => !!readStoredUpdateToken());
 
   const currentVersion = APP_CONFIG.version;
-  const release = state.status === 'current' || state.status === 'available' ? state.release : null;
+  const release =
+    state.status === 'current' ||
+    state.status === 'available' ||
+    state.status === 'downloading' ||
+    state.status === 'downloaded'
+      ? state.release
+      : null;
   const needsTokenHelp = state.status === 'error' && /private repository|access/i.test(state.message);
 
   async function checkForUpdates() {
@@ -275,7 +290,9 @@ function UpdateSection() {
       else writeStoredUpdateToken('');
 
       if (isNewerVersion(latest.tag_name, currentVersion)) {
-        setState({ status: 'available', release: latest, assetUrl: preferredReleaseAsset(latest) });
+        const asset = preferredReleaseAsset(latest);
+        if (!asset) throw new Error('The latest release has no downloadable asset attached.');
+        setState({ status: 'available', release: latest, asset });
       } else {
         setState({ status: 'current', release: latest });
       }
@@ -284,9 +301,59 @@ function UpdateSection() {
     }
   }
 
-  function openRelease() {
-    const url = state.status === 'available' ? state.assetUrl : release?.html_url ?? APP_CONFIG.updates.releasesUrl;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  async function downloadUpdate() {
+    if (state.status !== 'available') {
+      window.open(release?.html_url ?? APP_CONFIG.updates.releasesUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const trimmedToken = token.trim();
+    if (!trimmedToken) {
+      setState({
+        status: 'error',
+        message: 'A GitHub token is required to download update assets from the private repository.',
+      });
+      return;
+    }
+
+    const { release: availableRelease, asset } = state;
+    setState({ status: 'downloading', release: availableRelease, asset });
+    try {
+      const desktopUpdater = updaterBridge();
+      if (desktopUpdater) {
+        await desktopUpdater.downloadReleaseAsset({
+          assetApiUrl: asset.url,
+          token: trimmedToken,
+          fileName: asset.name,
+        });
+        setState({ status: 'downloaded', release: availableRelease, fileName: asset.name });
+        return;
+      }
+
+      const res = await fetch(asset.url, {
+        headers: {
+          Accept: 'application/octet-stream',
+          Authorization: `Bearer ${trimmedToken}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+      if (!res.ok) throw new Error(`Update download failed with HTTP ${res.status}.`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = asset.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setState({ status: 'downloaded', release: availableRelease, fileName: asset.name });
+    } catch (e) {
+      setState({
+        status: 'error',
+        message: e instanceof Error ? e.message : 'Unable to download the update.',
+      });
+    }
   }
 
   return (
@@ -300,6 +367,8 @@ function UpdateSection() {
           </div>
         </div>
         {state.status === 'available' && <GlassBadge tone="warn">Update available</GlassBadge>}
+        {state.status === 'downloading' && <GlassBadge tone="info">Downloading</GlassBadge>}
+        {state.status === 'downloaded' && <GlassBadge tone="success">Downloaded</GlassBadge>}
         {state.status === 'current' && <GlassBadge tone="success">Up to date</GlassBadge>}
         {state.status === 'no_release' && <GlassBadge tone="neutral">No releases</GlassBadge>}
       </div>
@@ -337,11 +406,12 @@ function UpdateSection() {
         </GlassButton>
         <GlassButton
           variant={state.status === 'available' ? 'primary' : 'subtle'}
-          onClick={openRelease}
+          loading={state.status === 'downloading'}
+          onClick={downloadUpdate}
           disabled={state.status === 'checking'}
         >
           {state.status === 'available' ? <Download className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-          {state.status === 'available' ? 'Update application' : 'Open releases'}
+          {state.status === 'available' || state.status === 'downloading' ? 'Update application' : 'Open releases'}
         </GlassButton>
       </div>
 
@@ -372,8 +442,14 @@ function UpdateSection() {
 
       {state.status === 'available' && (
         <p className="text-[11px] text-muted">
-          The update button opens the newest GitHub release or package asset. Install the downloaded
-          desktop package, then relaunch PrivacyFlow.
+          The update button downloads the newest package with your GitHub token, then opens it from
+          your Downloads folder. Close PrivacyFlow before running the downloaded update.
+        </p>
+      )}
+      {state.status === 'downloaded' && (
+        <p className="text-[11px] text-muted">
+          Downloaded {state.fileName}. If Windows did not open it automatically, open it from your Downloads folder.
+          Close PrivacyFlow before running the update.
         </p>
       )}
     </div>

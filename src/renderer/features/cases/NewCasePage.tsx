@@ -1,0 +1,220 @@
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { platform } from '../../platform';
+import {
+  REQUEST_TYPES, INTAKE_CHANNELS, JURISDICTIONS, CLIENT_CENTER_STATUSES, RELATIONSHIP_TYPES,
+} from '@shared/constants';
+import type { NewCaseInput } from '../../platform/types';
+import { PageHeader } from '../../layouts/AppShell';
+import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
+import { useAuth, can } from '../../store/auth';
+
+export function NewCasePage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [busy, setBusy] = React.useState(false);
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  const [requestId, setRequestId] = React.useState('');
+  const [lastName, setLastName] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [clientCenterStatus, setClientCenterStatus] = React.useState<string>('Not located');
+  const [emailedFA, setEmailedFA] = React.useState('');
+  const [relationship, setRelationship] = React.useState<string>('Customer');
+  const [minor, setMinor] = React.useState(false);
+  const [authorizedAgent, setAgent] = React.useState(false);
+
+  const [requestTypes, setRequestTypes] = React.useState<string[]>(['Access']);
+  const [intakeChannel, setChannel] = React.useState<string>('Email');
+  // Initialized empty; populated from the workspace default jurisdiction
+  // (Settings tab) once settings load, so the form always starts with the
+  // configured default rather than a hardcoded value.
+  const [jurisdiction, setJurisdiction] = React.useState<string>('');
+  const [dateCsReceived, setDateCsReceived] = React.useState('');
+  const [dateDppReceived, setDateDppReceived] = React.useState('');
+  const [standardResponseSent, setStandardResponseSent] = React.useState('');
+  const [forwardedToRon, setForwardedToRon] = React.useState('');
+  const [description, setDescription] = React.useState('');
+
+  React.useEffect(() => {
+    platform().system.settings().then((s) => {
+      const def = s.defaultJurisdiction;
+      setJurisdiction((cur) =>
+        cur || (JURISDICTIONS.includes(def as typeof JURISDICTIONS[number])
+          ? def
+          : JURISDICTIONS[JURISDICTIONS.length - 1]),
+      );
+    });
+  }, []);
+
+  if (!can(user?.role, 'cases.create')) {
+    return (
+      <GlassPanel><p className="text-sm text-muted">You do not have permission to create requests.</p></GlassPanel>
+    );
+  }
+
+  function toggleType(t: string) {
+    setRequestTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  }
+
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!requestId.trim()) e.requestId = 'Required';
+    if (!lastName.trim()) e.lastName = 'Required';
+    if (!email.trim() || !/.+@.+\..+/.test(email)) e.email = 'Valid email required';
+    if (requestTypes.length === 0) e.requestTypes = 'Select at least one request type';
+    if (!description.trim()) e.description = 'Describe the request';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!validate()) return;
+    setBusy(true);
+    const input: NewCaseInput = {
+      requestTypes,
+      intakeChannel,
+      jurisdiction: jurisdiction || 'Other',
+      priority: 'Medium',
+      risk: 'Medium',
+      description,
+      subject: {
+        firstName: requestId,
+        lastName,
+        emails: [email],
+        phones: [],
+        addresses: [],
+        relationship,
+        minor,
+        authorizedAgent,
+        identifiers: [{ label: 'Request ID', value: requestId }],
+        clientCenterStatus,
+        emailedFA: emailedFA || undefined,
+      },
+      intakeDates: {
+        dateClientServiceReceivedEmail: dateCsReceived || undefined,
+        dateDppReceivedEmail: dateDppReceived || undefined,
+        standardResponseSent: standardResponseSent || undefined,
+        forwardedEmailToRon: forwardedToRon || undefined,
+      },
+    };
+    const created = await platform().cases.create(input);
+    setBusy(false);
+    navigate(`/cases/${created.id}`);
+  }
+
+  return (
+    <div>
+      <button onClick={() => navigate('/cases')} className="mb-3 flex items-center gap-1.5 text-sm text-muted hover:text-ink focus-ring">
+        <ArrowLeft className="h-4 w-4" /> Back to requests
+      </button>
+      <PageHeader title="New request" subtitle="Log an incoming data subject request." />
+
+      <form onSubmit={submit} className="grid gap-4 lg:grid-cols-2">
+        <GlassPanel>
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">Requester</h3>
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Request ID" error={errors.requestId}>
+                <GlassInput value={requestId} onChange={(e) => setRequestId(e.target.value)} placeholder="e.g. REQ-1042" />
+              </Field>
+              <Field label="Last name" error={errors.lastName}>
+                <GlassInput value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Email" error={errors.email}>
+              <GlassInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Client Center Status">
+                <GlassSelect value={clientCenterStatus} onChange={(e) => setClientCenterStatus(e.target.value)}>
+                  {CLIENT_CENTER_STATUSES.map((s) => <option key={s}>{s}</option>)}
+                </GlassSelect>
+              </Field>
+              <Field label="Emailed FA">
+                <GlassInput type="date" value={emailedFA} onChange={(e) => setEmailedFA(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Relationship">
+              <GlassSelect value={relationship} onChange={(e) => setRelationship(e.target.value)}>
+                {RELATIONSHIP_TYPES.map((r) => <option key={r}>{r}</option>)}
+              </GlassSelect>
+            </Field>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" className="h-4 w-4 focus-ring" checked={minor} onChange={(e) => setMinor(e.target.checked)} /> Minor
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" className="h-4 w-4 focus-ring" checked={authorizedAgent} onChange={(e) => setAgent(e.target.checked)} /> Authorized agent
+              </label>
+            </div>
+          </div>
+        </GlassPanel>
+
+        <GlassPanel>
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">Request</h3>
+          <div className="flex flex-col gap-3">
+            <Field label="Request types" error={errors.requestTypes}>
+              <div className="flex flex-wrap gap-2">
+                {REQUEST_TYPES.map((t) => (
+                  <button
+                    type="button"
+                    key={t}
+                    onClick={() => toggleType(t)}
+                    className={`rounded-capsule border px-3 py-1 text-xs transition-all focus-ring ${
+                      requestTypes.includes(t)
+                        ? 'border-transparent bg-accent text-accent-ink'
+                        : 'border-line text-muted hover:text-ink'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Intake channel">
+                <GlassSelect value={intakeChannel} onChange={(e) => setChannel(e.target.value)}>
+                  {INTAKE_CHANNELS.map((c) => <option key={c}>{c}</option>)}
+                </GlassSelect>
+              </Field>
+              <Field label="Jurisdiction" hint="Defaults to the workspace default (Settings tab).">
+                <GlassSelect value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}>
+                  {JURISDICTIONS.map((j) => <option key={j}>{j}</option>)}
+                </GlassSelect>
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Date Client Svcs. Rec'd Email">
+                <GlassInput type="date" value={dateCsReceived} onChange={(e) => setDateCsReceived(e.target.value)} />
+              </Field>
+              <Field label="Date DPP Rec'd email from Client Svcs.">
+                <GlassInput type="date" value={dateDppReceived} onChange={(e) => setDateDppReceived(e.target.value)} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Standard Response Sent">
+                <GlassInput type="date" value={standardResponseSent} onChange={(e) => setStandardResponseSent(e.target.value)} />
+              </Field>
+              <Field label="Forwarded email to Ron K. (optional)">
+                <GlassInput type="date" value={forwardedToRon} onChange={(e) => setForwardedToRon(e.target.value)} />
+              </Field>
+            </div>
+          </div>
+        </GlassPanel>
+
+        <GlassPanel className="lg:col-span-2">
+          <Field label="Description" error={errors.description}>
+            <GlassTextarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Summarise what the requester is asking for…" />
+          </Field>
+          <div className="mt-4 flex justify-end gap-2">
+            <GlassButton type="button" onClick={() => navigate('/cases')}>Cancel</GlassButton>
+            <GlassButton type="submit" variant="primary" loading={busy}>Create request</GlassButton>
+          </div>
+        </GlassPanel>
+      </form>
+    </div>
+  );
+}

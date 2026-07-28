@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------- */
+/* Liquid Glass design tokens. Themes swap CSS variables via data-* attrs.    */
+/* -------------------------------------------------------------------------- */
+:root {
+  --pf-radius: 18px;
+  --pf-motion-fast: 120ms;
+  --pf-motion: 200ms;
+  --pf-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --pf-glass-blur: 18px;
+  --pf-glass-saturate: 140%;
+}
+
+/* Dark (default) */
+html[data-theme='dark'] {
+  --pf-bg: #0b1020;
+  --pf-bg-grad-a: #101a36;
+  --pf-bg-grad-b: #0a0e1c;
+  --pf-surface: rgba(24, 32, 56, 0.62);
+  --pf-surface-2: rgba(30, 40, 68, 0.55);
+  --pf-surface-solid: #141b30;
+  --pf-text: #eef2fb;
+  --pf-text-muted: #9aa6c4;
+  --pf-border: rgba(148, 170, 220, 0.16);
+  --pf-highlight: rgba(255, 255, 255, 0.08);
+  --pf-accent: #6ea8ff;
+  --pf-accent-rgb: 110 168 255;
+  --pf-accent-fg: #071021;
+  --pf-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --pf-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+/* Light */
+html[data-theme='light'] {
+  --pf-bg: #eef1f8;
+  --pf-bg-grad-a: #ffffff;
+  --pf-bg-grad-b: #dde5f4;
+  --pf-surface: rgba(255, 255, 255, 0.68);
+  --pf-surface-2: rgba(255, 255, 255, 0.82);
+  --pf-surface-solid: #ffffff;
+  --pf-text: #131a2b;
+  --pf-text-muted: #5a6786;
+  --pf-border: rgba(20, 40, 90, 0.12);
+  --pf-highlight: rgba(255, 255, 255, 0.7);
+  --pf-accent: #2f6bff;
+  --pf-accent-rgb: 47 107 255;
+  --pf-accent-fg: #ffffff;
+  --pf-shadow: 0 8px 30px rgba(30, 50, 100, 0.12);
+  --pf-shadow-lg: 0 24px 60px rgba(30, 50, 100, 0.18);
+}
+
+/* Increased contrast overrides */
+html[data-contrast='high'] {
+  --pf-border: currentColor;
+  --pf-text-muted: var(--pf-text);
+}
+html[data-theme='dark'][data-contrast='high'] {
+  --pf-surface: #0d1428;
+  --pf-surface-2: #121a33;
+  --pf-accent: #9cc2ff;
+  --pf-accent-rgb: 156 194 255;
+}
+html[data-theme='light'][data-contrast='high'] {
+  --pf-surface: #ffffff;
+  --pf-surface-2: #ffffff;
+  --pf-accent: #0b3fd6;
+  --pf-accent-rgb: 11 63 214;
+}
+
+/* Reduced transparency: replace glass with opaque surfaces */
+html[data-transparency='off'] {
+  --pf-glass-blur: 0px;
+  --pf-glass-saturate: 100%;
+}
+html[data-theme='dark'][data-transparency='off'] {
+  --pf-surface: #141b30;
+  --pf-surface-2: #182039;
+}
+html[data-theme='light'][data-transparency='off'] {
+  --pf-surface: #ffffff;
+  --pf-surface-2: #f4f6fc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--pf-text);
+  background:
+    radial-gradient(1200px 800px at 12% -10%, var(--pf-bg-grad-a), transparent 60%),
+    radial-gradient(1000px 700px at 100% 0%, var(--pf-bg-grad-b), transparent 55%),
+    var(--pf-bg);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glass surface primitives */
+.glass {
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  box-shadow: var(--pf-shadow);
+  backdrop-filter: blur(var(--pf-glass-blur)) saturate(var(--pf-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--pf-glass-blur)) saturate(var(--pf-glass-saturate));
+}
+.glass-2 {
+  background: var(--pf-surface-2);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  box-shadow: var(--pf-shadow-lg);
+  backdrop-filter: blur(calc(var(--pf-glass-blur) + 6px)) saturate(var(--pf-glass-saturate));
+  -webkit-backdrop-filter: blur(calc(var(--pf-glass-blur) + 6px)) saturate(var(--pf-glass-saturate));
+}
+/* Stable content surface (no heavy blur behind dense data) */
+.content-surface {
+  background: var(--pf-surface-2);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+html[data-motion='off'] * {
+  transition-duration: 0.001ms !important;
+  animation-duration: 0.001ms !important;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--pf-border);
+  border-radius: 999px;
+}

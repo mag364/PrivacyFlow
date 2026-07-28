@@ -58,21 +58,21 @@ function defaultEmailTemplates(): EmailTemplate[] {
       id: 'tpl-acknowledgement',
       name: 'Request acknowledgement',
       subject: 'We received your privacy request ({{case.number}})',
-      body: 'Dear {{requester.firstName}} {{requester.lastName}},\n\nThis confirms we have received your {{case.types}} request, logged as {{case.number}} on {{case.receivedDate}}. We will respond by {{case.dueDate}}.\n\nKind regards,\n{{org.name}} Privacy Office',
+      body: 'Dear {{requester.lastName}},\n\nThis confirms we have received your {{case.types}} request, logged as {{case.number}} on {{case.receivedDate}}. We will respond by {{case.dueDate}}.\n\nKind regards,\n{{org.name}} Privacy Office',
       audience: 'requester',
     },
     {
       id: 'tpl-standard-response',
       name: 'Standard response',
       subject: 'Response to your privacy request ({{case.number}})',
-      body: 'Dear {{requester.firstName}} {{requester.lastName}},\n\nThank you for your {{case.types}} request ({{case.number}}). This is our standard response confirming next steps and the expected timeline.\n\nKind regards,\n{{org.name}} Privacy Office',
+      body: 'Dear {{requester.lastName}},\n\nThank you for your {{case.types}} request ({{case.number}}). This is our standard response confirming next steps and the expected timeline.\n\nKind regards,\n{{org.name}} Privacy Office',
       audience: 'requester',
     },
     {
       id: 'tpl-dept-search',
       name: 'Forward to Ron K.',
       subject: 'Data search required — {{case.number}} (due {{case.dueDate}})',
-      body: 'Hello {{rule.department}} team,\n\nPlease search your systems for personal data relating to {{requester.firstName}} {{requester.lastName}} ({{requester.email}}) in support of privacy request {{case.number}} ({{case.types}}). The statutory due date is {{case.dueDate}}.\n\nThank you,\n{{org.name}} Privacy Office',
+      body: 'Hello {{rule.department}} team,\n\nPlease search your systems for personal data relating to {{requester.lastName}} ({{requester.email}}) in support of privacy request {{case.number}} ({{case.types}}). The statutory due date is {{case.dueDate}}.\n\nThank you,\n{{org.name}} Privacy Office',
       audience: 'department',
       department: 'Customer Support',
     },
@@ -80,7 +80,7 @@ function defaultEmailTemplates(): EmailTemplate[] {
       id: 'tpl-fulfilled',
       name: 'Request closed',
       subject: 'Your privacy request {{case.number}} is complete',
-      body: 'Dear {{requester.firstName}} {{requester.lastName}},\n\nYour {{case.types}} request ({{case.number}}) has been completed and closed. A summary of the actions taken is attached.\n\nKind regards,\n{{org.name}} Privacy Office',
+      body: 'Dear {{requester.lastName}},\n\nYour {{case.types}} request ({{case.number}}) has been completed and closed. A summary of the actions taken is attached.\n\nKind regards,\n{{org.name}} Privacy Office',
       audience: 'requester',
     },
   ];
@@ -167,7 +167,6 @@ const FIELD_LABELS: Record<string, string> = {
 
 const NESTED_LABELS: Record<string, Record<string, string>> = {
   subject: {
-    firstName: 'request ID',
     lastName: 'last name',
     emails: 'email',
     phones: 'phone',
@@ -250,7 +249,6 @@ function fmtShort(iso?: string): string {
 
 function renderTemplate(text: string, c: DsrCase, orgName: string, department?: string): string {
   const map: Record<string, string> = {
-    'requester.firstName': c.subject.firstName,
     'requester.lastName': c.subject.lastName,
     'requester.email': c.subject.emails[0] ?? '',
     'case.number': c.caseNumber,
@@ -417,6 +415,26 @@ function migrateWorkflow(d: Db): boolean {
   return changed;
 }
 
+function removeRequesterFirstNamePlaceholder(text: string): string {
+  return text
+    .replace(/\{\{\s*requester\.firstName\s*\}\}\s+\{\{\s*requester\.lastName\s*\}\}/g, '{{requester.lastName}}')
+    .replace(/\{\{\s*requester\.firstName\s*\}\}/g, '{{requester.lastName}}');
+}
+
+function migrateRequesterFirstNameTemplates(d: Db): boolean {
+  let changed = false;
+  for (const template of d.settings.emailTemplates ?? []) {
+    const subject = removeRequesterFirstNamePlaceholder(template.subject);
+    const body = removeRequesterFirstNamePlaceholder(template.body);
+    if (subject !== template.subject || body !== template.body) {
+      template.subject = subject;
+      template.body = body;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 let cache: Db | null = null;
 
 function load(): Db | null {
@@ -438,7 +456,10 @@ function load(): Db | null {
     if (!Array.isArray(s.emailTemplates)) s.emailTemplates = d.emailTemplates;
     if (!Array.isArray(s.automationRules)) s.automationRules = d.automationRules;
     if (!s.m365 || typeof s.m365.connected !== 'boolean') s.m365 = d.m365;
-    if (migrateWorkflow(cache) && !isReadOnly()) save(cache);
+    const workflowMigrated = migrateWorkflow(cache);
+    const templateMigrated = migrateRequesterFirstNameTemplates(cache);
+    const migrated = workflowMigrated || templateMigrated;
+    if (migrated && !isReadOnly()) save(cache);
     return cache;
   } catch {
     return null;

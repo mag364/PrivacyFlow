@@ -156,7 +156,7 @@ export function ReportsPage() {
           ...cases.map((c) => [
             c.caseNumber,
             c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? '—',
-            `${c.subject.firstName} ${c.subject.lastName}`,
+            c.subject.lastName,
             c.requestTypes.join('; '),
             c.status,
             String(c.jurisdiction),

@@ -156,7 +156,7 @@ export function DashboardPage() {
             <div key={c.id} className="flex items-center gap-3 py-1.5 text-sm">
               <GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge>
               <button className="text-accent focus-ring" onClick={() => navigate(`/cases/${c.id}`)}>{c.caseNumber}</button>
-              <span className="truncate text-muted">{c.subject.firstName} {c.subject.lastName} — {c.requestTypes.join(', ')}</span>
+              <span className="truncate text-muted">{c.subject.lastName} — {c.requestTypes.join(', ')}</span>
             </div>
           ))}
         </div>

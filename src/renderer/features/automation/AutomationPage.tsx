@@ -15,7 +15,7 @@ const uid = () =>
   (globalThis.crypto?.randomUUID?.() ?? `id-${Math.random().toString(36).slice(2)}-${Date.now()}`);
 
 const PLACEHOLDERS = [
-  '{{requester.firstName}}', '{{requester.lastName}}', '{{requester.email}}',
+  '{{requester.lastName}}', '{{requester.email}}',
   '{{case.number}}', '{{case.types}}', '{{case.status}}', '{{case.dueDate}}',
   '{{case.receivedDate}}', '{{org.name}}', '{{rule.department}}',
 ];
@@ -190,7 +190,7 @@ export function AutomationPage() {
             </div>
             <p className="mb-3 text-xs text-muted">
               Templates support placeholders like <code className="text-accent">{'{{case.number}}'}</code> and{' '}
-              <code className="text-accent">{'{{requester.firstName}}'}</code>, replaced when the email sends.
+              <code className="text-accent">{'{{requester.lastName}}'}</code>, replaced when the email sends.
             </p>
 
             <div className="flex flex-col gap-2">

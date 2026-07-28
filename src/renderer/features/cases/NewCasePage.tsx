@@ -81,7 +81,6 @@ export function NewCasePage() {
       risk: 'Medium',
       description,
       subject: {
-        firstName: requestId,
         lastName,
         emails: [email],
         phones: [],

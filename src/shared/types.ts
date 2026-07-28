@@ -27,7 +27,9 @@ export interface Identifier {
 }
 
 export interface DataSubject {
-  firstName: string;
+  // Legacy only: older workspaces stored request IDs here. New requests do not
+  // collect requester first names.
+  firstName?: string;
   lastName: string;
   preferredName?: string;
   emails: string[];

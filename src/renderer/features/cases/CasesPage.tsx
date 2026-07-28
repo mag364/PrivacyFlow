@@ -50,7 +50,8 @@ export function CasesPage() {
     if (status !== 'all' && status !== 'open' && status !== 'closed' && c.status !== status) return false;
     if (type !== 'all' && !c.requestTypes.map(String).includes(type)) return false;
     if (q) {
-      const hay = `${c.caseNumber} ${c.subject.firstName} ${c.subject.lastName} ${c.subject.emails.join(' ')} ${c.jurisdiction}`.toLowerCase();
+      const requestId = c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '';
+      const hay = `${c.caseNumber} ${requestId} ${c.subject.lastName} ${c.subject.emails.join(' ')} ${c.jurisdiction}`.toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
@@ -188,7 +189,8 @@ export function CasesPage() {
               {rows.map((c) => {
                 const requestId =
                   c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ??
-                  (c.demo ? '—' : c.subject.firstName);
+                  c.subject.firstName ??
+                  '—';
                 const dateReceived = c.intakeDates?.dateDppReceivedEmail ?? c.sla.receivedDate;
                 return (
                   <tr

@@ -261,7 +261,6 @@ export async function createSeed(settings: OrgSettings): Promise<Db> {
       team: 'Privacy Office',
       tags: [],
       subject: {
-        firstName: spec.first,
         lastName: spec.last,
         emails: [spec.email],
         phones: spec.phone ? [spec.phone] : [],

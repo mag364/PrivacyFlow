@@ -127,7 +127,7 @@ export function CaseDetailPage() {
   const canEdit = can(user?.role, 'cases.update');
 
   const requestIdValue =
-    c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName;
+    c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '—';
 
   function startEdit() {
     setDraft({
@@ -136,7 +136,7 @@ export function CaseDetailPage() {
       jurisdiction: String(c!.jurisdiction),
       intakeChannel: String(c!.intakeChannel),
       requestId:
-        c!.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c!.subject.firstName,
+        c!.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c!.subject.firstName ?? '',
       lastName: c!.subject.lastName,
       email: c!.subject.emails[0] ?? '',
       relationship: String(c!.subject.relationship),
@@ -172,7 +172,6 @@ export function CaseDetailPage() {
         intakeChannel: draft.intakeChannel,
         subject: {
           ...c!.subject,
-          firstName: draft.requestId.trim(),
           lastName: draft.lastName.trim(),
           emails: [draft.email.trim(), ...c!.subject.emails.slice(1)],
           relationship: draft.relationship,

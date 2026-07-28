@@ -7,6 +7,7 @@ import path from 'node:path';
 // renderer is loaded by Electron; here it runs in the browser against the
 // localStorage fallback platform.
 export default defineConfig({
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {

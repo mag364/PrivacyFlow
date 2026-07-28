@@ -1,7 +1,7 @@
 {
   "name": "privacyflow",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "main": "build/electron/main.js",
   "author": {
@@ -33,6 +33,7 @@
   "build": {
     "appId": "com.mag364.privacyflow",
     "productName": "PrivacyFlow",
+    "copyright": "Copyright © 2026 ModernFix Pros, LLC",
     "directories": {
       "output": "release"
     },
@@ -42,7 +43,6 @@
       "package.json"
     ],
     "win": {
-      "publisherName": "ModernFix Pros, LLC",
       "target": [
         {
           "target": "portable",

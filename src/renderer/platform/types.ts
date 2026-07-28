@@ -87,6 +87,7 @@ export interface LoginResult {
 export interface CreateUserInput {
   name: string;
   username: string;
+  email?: string;
   role: Role;
 }
 

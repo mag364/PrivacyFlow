@@ -4,6 +4,7 @@ import { platform } from '../../platform';
 import { JURISDICTIONS } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
 import { GlassButton, GlassInput, GlassSelect, GlassPanel, Field } from '../../components/glass';
+import { chooseWorkspacePath, workspaceBridge, workspaceInfo, type WorkspaceInfo } from '../../platform/workspace';
 import privacyFlowIcon from '../../assets/privacyflow-icon.png';
 
 export function SetupPage({ onDone }: { onDone?: () => void }) {
@@ -13,6 +14,44 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
   const [defaultJurisdiction, setJur] = React.useState<string>(APP_CONFIG.defaults.defaultJurisdiction);
   const [demoDataInstalled, setDemo] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
+  const [workspace, setWorkspace] = React.useState<WorkspaceInfo | null>(null);
+  const [workspaceBusy, setWorkspaceBusy] = React.useState(false);
+  const [workspaceMessage, setWorkspaceMessage] = React.useState('');
+
+  React.useEffect(() => {
+    workspaceInfo().then(setWorkspace);
+  }, []);
+
+  async function changeWorkspace() {
+    setWorkspaceBusy(true);
+    setWorkspaceMessage('');
+    try {
+      const result = await chooseWorkspacePath();
+      if (result) {
+        setWorkspace({ dbPath: result.dbPath, lockState: result.lockState });
+        const raw = workspaceBridge()?.read();
+        if (raw) {
+          try {
+            const existing = JSON.parse(raw) as { settings?: { setupComplete?: boolean } };
+            if (existing.settings?.setupComplete) {
+              window.alert('Existing PrivacyFlow database selected. The app will reload from that workspace.');
+              window.location.reload();
+              return;
+            }
+          } catch {
+            // If the file is not readable JSON, leave setup on screen so Finish can initialize it.
+          }
+        }
+        setWorkspaceMessage(
+          result.changed
+            ? 'Database location selected. Finish setup to initialize this workspace, or restart if you selected an existing PrivacyFlow database.'
+            : 'This database location is already selected.',
+        );
+      }
+    } finally {
+      setWorkspaceBusy(false);
+    }
+  }
 
   async function finish() {
     setBusy(true);
@@ -36,6 +75,21 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
         </div>
 
         <div className="flex flex-col gap-3">
+          {workspaceBridge() && (
+            <div className="rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Database file</p>
+                  <p className="break-all font-mono text-xs text-ink">{workspace?.dbPath ?? 'Loading workspace location…'}</p>
+                </div>
+                <GlassButton loading={workspaceBusy} onClick={changeWorkspace}>
+                  Change folder…
+                </GlassButton>
+              </div>
+              {workspaceMessage && <p className="mt-2 text-[11px] text-muted">{workspaceMessage}</p>}
+            </div>
+          )}
+
           <Field label="Organization name">
             <GlassInput value={organizationName} onChange={(e) => setOrg(e.target.value)} />
           </Field>

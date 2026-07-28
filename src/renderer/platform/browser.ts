@@ -730,10 +730,12 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         }
         const name = input.name.trim();
         const username = input.username.trim().toLowerCase();
+        const email = input.email?.trim();
         if (!name) throw new Error('Name is required.');
         if (!/^[a-z0-9._-]{2,32}$/.test(username)) {
           throw new Error('Username must be 2–32 characters: lowercase letters, numbers, dots, dashes, underscores.');
         }
+        if (email && !/.+@.+\..+/.test(email)) throw new Error('Enter a valid email address.');
         if (d.users.some((u) => u.username.toLowerCase() === username)) {
           throw new Error(`The username "${username}" is already taken.`);
         }
@@ -742,6 +744,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           id: uid(),
           name,
           username,
+          email: email || undefined,
           role: input.role,
           active: true,
           createdAt: new Date().toISOString(),
@@ -755,7 +758,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           entityType: 'user',
           entityId: u.id,
           summary: `User ${u.name} (@${u.username}) created with role ${u.role} (temporary password issued)`,
-          newValue: { name: u.name, username: u.username, role: u.role },
+          newValue: { name: u.name, username: u.username, email: u.email, role: u.role },
         });
         save(d);
         return { user: publicUser(u), tempPassword };

@@ -578,10 +578,11 @@ export function SettingsPage() {
   const [addingUser, setAddingUser] = React.useState(false);
   const [newName, setNewName] = React.useState('');
   const [newUsername, setNewUsername] = React.useState('');
+  const [newEmail, setNewEmail] = React.useState('');
   const [newRole, setNewRole] = React.useState<Role>('privacy_analyst');
   const [addError, setAddError] = React.useState('');
   const [addBusy, setAddBusy] = React.useState(false);
-  const [issuedCredentials, setIssuedCredentials] = React.useState<{ username: string; tempPassword: string } | null>(null);
+  const [issuedCredentials, setIssuedCredentials] = React.useState<{ username: string; email?: string; tempPassword: string; inviteOpened?: boolean; inviteError?: string } | null>(null);
   const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
@@ -656,15 +657,59 @@ export function SettingsPage() {
       const { user: created, tempPassword } = await platform().auth.createUser({
         name: newName,
         username: newUsername,
+        email: newEmail || undefined,
         role: newRole,
       });
+      let inviteOpened = false;
+      let inviteError = '';
+      if (created.email) {
+        const subject = `${APP_CONFIG.productName} access`;
+        const body = [
+          `Hello ${created.name},`,
+          '',
+          `Your ${APP_CONFIG.productName} account has been created.`,
+          '',
+          `Download the latest Windows portable application from the private GitHub release page:`,
+          APP_CONFIG.updates.releasesUrl,
+          '',
+          `Repository: https://github.com/${APP_CONFIG.updates.owner}/${APP_CONFIG.updates.repo}`,
+          '',
+          `Username: ${created.username}`,
+          `Temporary password: ${tempPassword}`,
+          '',
+          'You will be prompted to set your own password the first time you sign in.',
+          '',
+          'Note: because the repository is private, your GitHub account must have access before the download link will open.',
+        ].join('\n');
+        try {
+          const outlook = outlookBridge();
+          if (outlook && settings.m365.connected && settings.m365.mode === 'outlook') {
+            await outlook.openDraft({
+              accountEmail: settings.m365.accountEmail,
+              to: created.email,
+              subject,
+              body,
+            });
+            inviteOpened = true;
+          } else {
+            const mail = mailBridge();
+            if (mail) {
+              await mail.openDraft({ to: created.email, subject, body });
+              inviteOpened = true;
+            }
+          }
+        } catch (e) {
+          inviteError = e instanceof Error ? e.message : 'Unable to open invite email.';
+        }
+      }
       setUsers((list) => [...list, created]);
       setAddingUser(false);
       setNewName('');
       setNewUsername('');
+      setNewEmail('');
       setNewRole('privacy_analyst');
       // Show the generated temporary password ONCE for the admin to share.
-      setIssuedCredentials({ username: created.username, tempPassword });
+      setIssuedCredentials({ username: created.username, email: created.email, tempPassword, inviteOpened, inviteError });
       setCopied(false);
     } catch (e) {
       setAddError(e instanceof Error ? e.message : 'Unable to create user.');
@@ -983,6 +1028,21 @@ export function SettingsPage() {
                 Shown once — only the salted hash is stored. Share this with the new user through a secure
                 channel; they'll be required to set their own password at first sign-in.
               </p>
+              {issuedCredentials.email && issuedCredentials.inviteOpened && (
+                <p className="text-[11px] text-emerald-300">
+                  Invite email draft opened for {issuedCredentials.email}.
+                </p>
+              )}
+              {issuedCredentials.email && issuedCredentials.inviteError && (
+                <p className="text-[11px] text-red-400">
+                  Invite email draft could not be opened for {issuedCredentials.email}: {issuedCredentials.inviteError}
+                </p>
+              )}
+              {!issuedCredentials.email && (
+                <p className="text-[11px] text-muted">
+                  No email address was entered, so no invite draft was opened.
+                </p>
+              )}
               <div className="flex justify-end">
                 <GlassButton variant="ghost" className="px-3 py-1.5 text-xs" onClick={() => setIssuedCredentials(null)}>
                   Dismiss
@@ -994,12 +1054,15 @@ export function SettingsPage() {
           {addingUser && canManageUsers && (
             <form onSubmit={createUser} className="mb-4 flex max-w-2xl flex-col gap-3 rounded-xl border border-accent/40 bg-[var(--pf-surface)] p-4">
               <p className="text-sm font-semibold text-ink">Add a new user</p>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-4">
                 <Field label="Full name">
                   <GlassInput value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Jordan Reyes" autoFocus />
                 </Field>
                 <Field label="Username" hint="Lowercase letters, numbers, dots, dashes, underscores.">
                   <GlassInput value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="e.g. jreyes" />
+                </Field>
+                <Field label="Email" hint="Used for the install invite.">
+                  <GlassInput type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="jreyes@example.com" />
                 </Field>
                 <Field label="Role">
                   <GlassSelect value={newRole} onChange={(e) => setNewRole(e.target.value as Role)}>
@@ -1012,7 +1075,8 @@ export function SettingsPage() {
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
                 <p className="text-[11px] text-muted">
                   A temporary password is generated automatically and shown to you once after creation. The new
-                  user signs in with it and is required to set their own password before gaining access.
+                  user signs in with it and is required to set their own password before gaining access. If an
+                  email address is entered, PrivacyFlow opens an invite draft with the private GitHub release link.
                 </p>
               </div>
               <div className="flex justify-end gap-2">
@@ -1041,7 +1105,7 @@ export function SettingsPage() {
                     <tr key={u.id} className="border-b border-line/60">
                       <td className="px-4 py-3">
                         <p className="font-medium text-ink">{u.name}{isSelf && <span className="ml-2 text-[10px] text-muted">(you)</span>}</p>
-                        <p className="text-[11px] text-muted">@{u.username}</p>
+                        <p className="text-[11px] text-muted">@{u.username}{u.email ? ` · ${u.email}` : ''}</p>
                       </td>
                       <td className="px-4 py-3">
                         {canManageUsers && !isSelf ? (

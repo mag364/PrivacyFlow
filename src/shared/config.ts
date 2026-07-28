@@ -15,10 +15,12 @@ export const APP_CONFIG = {
     releasesUrl: 'https://github.com/mag364/PrivacyFlow/releases',
   },
   disclaimer:
-    'PrivacyFlow is a workflow and record-keeping tool. It supports privacy operations but does not provide legal advice. All demonstration data is fictional.',
+    'PrivacyFlow is a workflow and record-keeping tool for privacy operations. All demonstration data is fictional.',
   defaults: {
+    organizationName: 'Raymond James Financial',
     caseNumberPrefix: 'DSRREQ',
     caseNumberSequenceLength: 7,
+    defaultJurisdiction: 'US',
     autoLockMinutes: 15,
   },
   slaRules: [

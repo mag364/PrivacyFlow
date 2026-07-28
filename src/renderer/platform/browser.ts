@@ -97,9 +97,9 @@ function defaultAutomationRules(): AutomationRule[] {
 
 function defaultSettings(): OrgSettings {
   return {
-    organizationName: 'My Organization',
+    organizationName: APP_CONFIG.defaults.organizationName,
     caseNumberPrefix: APP_CONFIG.defaults.caseNumberPrefix,
-    defaultJurisdiction: 'GDPR (EU/EEA)',
+    defaultJurisdiction: APP_CONFIG.defaults.defaultJurisdiction,
     autoLockMinutes: APP_CONFIG.defaults.autoLockMinutes,
     theme: 'dark',
     setupComplete: false,
@@ -603,9 +603,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         assertWritable();
         const settings: OrgSettings = {
           ...defaultSettings(),
-          organizationName: input.organizationName ?? 'My Organization',
+          organizationName: input.organizationName ?? APP_CONFIG.defaults.organizationName,
           caseNumberPrefix: input.caseNumberPrefix ?? APP_CONFIG.defaults.caseNumberPrefix,
-          defaultJurisdiction: input.defaultJurisdiction ?? 'GDPR (EU/EEA)',
+          defaultJurisdiction: input.defaultJurisdiction ?? APP_CONFIG.defaults.defaultJurisdiction,
           autoLockMinutes: input.autoLockMinutes ?? APP_CONFIG.defaults.autoLockMinutes,
           theme: input.theme ?? 'dark',
           demoDataInstalled: input.demoDataInstalled ?? false,

@@ -8,9 +8,9 @@ import { GlassButton, GlassInput, GlassSelect, GlassPanel, Field } from '../../c
 
 export function SetupPage({ onDone }: { onDone?: () => void }) {
   const navigate = useNavigate();
-  const [organizationName, setOrg] = React.useState('My Organization');
+  const [organizationName, setOrg] = React.useState(APP_CONFIG.defaults.organizationName);
   const [caseNumberPrefix, setPrefix] = React.useState(APP_CONFIG.defaults.caseNumberPrefix);
-  const [defaultJurisdiction, setJur] = React.useState<string>('GDPR (EU/EEA)');
+  const [defaultJurisdiction, setJur] = React.useState<string>(APP_CONFIG.defaults.defaultJurisdiction);
   const [demoDataInstalled, setDemo] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
 

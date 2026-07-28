@@ -1,0 +1,7 @@
+# Local GitHub token file
+#
+# Copy this file to .github-token and replace this text with a fine-grained
+# GitHub personal access token that has Contents: Read and write access to
+# mag364/PrivacyFlow.
+#
+# Never commit .github-token.

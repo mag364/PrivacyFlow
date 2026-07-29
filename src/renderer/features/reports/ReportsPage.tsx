@@ -246,7 +246,7 @@ export function ReportsPage() {
                 cx="50%"
                 cy="50%"
                 outerRadius={100}
-                label={{ fill: 'var(--pf-text)', stroke: 'var(--pf-bg)', strokeWidth: 3, paintOrder: 'stroke', fontSize: 12 }}
+                label={{ fill: '#ffffff', stroke: '#0b1020', strokeWidth: 3, paintOrder: 'stroke', fontSize: 12 }}
               >
                 {projectsByClass.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
               </Pie>

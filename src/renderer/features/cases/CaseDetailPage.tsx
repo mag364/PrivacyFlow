@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import {
   ArrowLeft, Mail, ShieldCheck, FileText, MessageSquare,
   StickyNote, ClipboardList, Send, Upload, Paperclip, Pencil, Check, X, Save,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type {
@@ -66,6 +67,7 @@ export function CaseDetailPage() {
   const [tab, setTab] = React.useState<TabKey>('overview');
   const [notes, setNotes] = React.useState<CaseNote[]>([]);
   const [comms, setComms] = React.useState<Communication[]>([]);
+  const [commPage, setCommPage] = React.useState(0);
   const [docs, setDocs] = React.useState<CaseDocument[]>([]);
   const [audit, setAudit] = React.useState<AuditEvent[]>([]);
   const [noteText, setNoteText] = React.useState('');
@@ -114,6 +116,10 @@ export function CaseDetailPage() {
   }, [id]);
 
   React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => { setCommPage(0); }, [id]);
+  React.useEffect(() => {
+    setCommPage((page) => Math.min(page, Math.max(comms.length - 1, 0)));
+  }, [comms.length]);
 
   if (c === undefined) return <Spinner label="Loading request…" />;
   if (c === null) {
@@ -128,6 +134,7 @@ export function CaseDetailPage() {
   }
 
   const canEdit = can(user?.role, 'requests.update');
+  const activeComm = comms[commPage] ?? null;
 
   const requestIdValue =
     c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '—';
@@ -649,18 +656,58 @@ export function CaseDetailPage() {
                 </form>
               )}
 
-              {comms.length === 0 ? <EmptyState title="No communications" icon={<MessageSquare className="h-6 w-6" />} /> : (
-                <div className="flex flex-col gap-2">
-                  {comms.map((m) => (
-                    <div key={m.id} className="min-w-0 overflow-hidden rounded-xl border border-line px-4 py-3">
-                      <div className="mb-1 flex min-w-0 items-center gap-2">
-                        <GlassBadge tone={m.direction === 'Inbound' ? 'info' : 'neutral'}>{m.direction}</GlassBadge>
-                        <span className="min-w-0 flex-1 break-words text-sm font-medium text-ink">{m.subject}</span>
-                        <span className="shrink-0 text-xs text-muted">{fmtDateTime(m.sentAt)}</span>
-                      </div>
-                      <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted [overflow-wrap:anywhere]">{m.summary}</p>
+              {comms.length === 0 || !activeComm ? <EmptyState title="No communications" icon={<MessageSquare className="h-6 w-6" />} /> : (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2">
+                    <p className="text-xs font-medium text-muted">
+                      Communication {commPage + 1} of {comms.length}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={commPage === 0}
+                        onClick={() => setCommPage((page) => Math.max(page - 1, 0))}
+                        className="rounded-lg border border-line p-1.5 text-muted transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                        title="Previous communication"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      {comms.map((m, index) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setCommPage(index)}
+                          className={clsx(
+                            'h-8 min-w-8 rounded-lg border px-2 text-xs font-medium transition focus-ring',
+                            commPage === index
+                              ? 'border-accent bg-accent/15 text-ink'
+                              : 'border-line text-muted hover:text-ink',
+                          )}
+                          title={`Show communication ${index + 1}`}
+                        >
+                          {index + 1}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={commPage >= comms.length - 1}
+                        onClick={() => setCommPage((page) => Math.min(page + 1, comms.length - 1))}
+                        className="rounded-lg border border-line p-1.5 text-muted transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 focus-ring"
+                        title="Next communication"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="min-w-0 overflow-hidden rounded-xl border border-line px-4 py-3">
+                    <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
+                      <GlassBadge tone={activeComm.direction === 'Inbound' ? 'info' : 'neutral'}>{activeComm.direction}</GlassBadge>
+                      <span className="min-w-0 flex-1 break-words text-sm font-medium text-ink">{activeComm.subject}</span>
+                      <span className="shrink-0 text-xs text-muted">{fmtDateTime(activeComm.sentAt)}</span>
+                    </div>
+                    <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted [overflow-wrap:anywhere]">{activeComm.summary}</p>
+                  </div>
                 </div>
               )}
             </GlassPanel>

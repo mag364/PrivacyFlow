@@ -839,6 +839,7 @@ export function SettingsPage() {
       });
       let inviteOpened = false;
       let inviteError = '';
+      const inviteDraftError = 'PrivacyFlow could not confirm that the invite draft opened. If no draft appeared, copy the temporary password and send the invite manually.';
       if (created.email) {
         const subject = `${APP_CONFIG.productName} access`;
         const body = [
@@ -858,9 +859,15 @@ export function SettingsPage() {
           '',
           'No GitHub account is required to download the public release.',
         ].join('\n');
-        try {
-          const outlook = outlookBridge();
-          if (outlook && settings.m365.connected && settings.m365.mode === 'outlook') {
+        const openFallbackDraft = async () => {
+          const mail = mailBridge();
+          if (!mail) return false;
+          await mail.openDraft({ to: created.email!, subject, body });
+          return true;
+        };
+        const outlook = outlookBridge();
+        if (outlook && settings.m365.connected && settings.m365.mode === 'outlook') {
+          try {
             await outlook.openDraft({
               accountEmail: settings.m365.accountEmail,
               to: created.email,
@@ -868,15 +875,22 @@ export function SettingsPage() {
               body,
             });
             inviteOpened = true;
-          } else {
-            const mail = mailBridge();
-            if (mail) {
-              await mail.openDraft({ to: created.email, subject, body });
-              inviteOpened = true;
+          } catch {
+            try {
+              inviteOpened = await openFallbackDraft();
+            } catch {
+              inviteError = inviteDraftError;
             }
           }
-        } catch (e) {
-          inviteError = e instanceof Error ? e.message : 'Unable to open invite email.';
+        } else {
+          try {
+            inviteOpened = await openFallbackDraft();
+          } catch {
+            inviteError = inviteDraftError;
+          }
+        }
+        if (!inviteOpened && !inviteError) {
+          inviteError = 'No local email draft tool was available.';
         }
       }
       setUsers((list) => [...list, created]);
@@ -1182,15 +1196,15 @@ export function SettingsPage() {
           {userError && <p className="mb-3 text-xs text-red-400">{userError}</p>}
 
           {issuedCredentials && (
-            <div className="mb-4 flex max-w-2xl flex-col gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4">
-              <div className="flex items-center gap-2">
+            <div className="mb-4 flex max-w-2xl min-w-0 flex-col gap-3 overflow-hidden rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+              <div className="flex min-w-0 items-center gap-2">
                 <KeyRound className="h-4 w-4 text-emerald-400" />
-                <p className="text-sm font-semibold text-ink">
+                <p className="min-w-0 break-words text-sm font-semibold text-ink [overflow-wrap:anywhere]">
                   Temporary password for <span className="text-accent">@{issuedCredentials.username}</span>
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2 font-mono text-sm text-ink">
+              <div className="flex min-w-0 items-center gap-2">
+                <code className="min-w-0 flex-1 break-words rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2 font-mono text-sm text-ink [overflow-wrap:anywhere]">
                   {issuedCredentials.tempPassword}
                 </code>
                 <GlassButton variant="subtle" className="px-3 py-2 text-xs" onClick={copyTempPassword}>
@@ -1203,12 +1217,12 @@ export function SettingsPage() {
                 channel; they'll be required to set their own password at first sign-in.
               </p>
               {issuedCredentials.email && issuedCredentials.inviteOpened && (
-                <p className="text-[11px] text-emerald-300">
+                <p className="min-w-0 break-words text-[11px] text-emerald-300 [overflow-wrap:anywhere]">
                   Invite email draft opened for {issuedCredentials.email}.
                 </p>
               )}
               {issuedCredentials.email && issuedCredentials.inviteError && (
-                <p className="text-[11px] text-red-400">
+                <p className="min-w-0 break-words text-[11px] text-red-400 [overflow-wrap:anywhere]">
                   Invite email draft could not be opened for {issuedCredentials.email}: {issuedCredentials.inviteError}
                 </p>
               )}

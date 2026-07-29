@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('privacyflow', {
     recheckLock: () => ipcRenderer.invoke('workspace:recheckLock'),
     claimStale: () => ipcRenderer.invoke('workspace:claimStale'),
     info: () => ipcRenderer.invoke('workspace:info'),
+    syncNow: () => ipcRenderer.invoke('workspace:syncNow'),
     choosePath: () => ipcRenderer.invoke('workspace:choosePath'),
   },
   updater: {

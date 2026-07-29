@@ -17,7 +17,7 @@ import { useTheme } from '../../store/theme';
 import { useAuth, can } from '../../store/auth';
 import { fmtDateTime } from '../../lib/format';
 import {
-  workspaceBridge, updaterBridge, workspaceInfo, chooseWorkspacePath, type WorkspaceInfo,
+  workspaceBridge, updaterBridge, workspaceInfo, chooseWorkspacePath, syncWorkspaceNow, type WorkspaceInfo,
   outlookBridge, mailBridge, graphBridge, backupBridge, type BackupEntry,
 } from '../../platform/workspace';
 import { APP_CONFIG } from '@shared/config';
@@ -463,6 +463,7 @@ function UpdateSection() {
 function WorkspaceTab() {
   const [info, setInfo] = React.useState<WorkspaceInfo | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [syncBusy, setSyncBusy] = React.useState(false);
 
   React.useEffect(() => {
     workspaceInfo().then(setInfo);
@@ -483,8 +484,35 @@ function WorkspaceTab() {
     }
   }
 
+  async function syncNow() {
+    setSyncBusy(true);
+    try {
+      const next = await syncWorkspaceNow();
+      if (next) setInfo(next);
+    } catch {
+      const next = await workspaceInfo();
+      if (next) setInfo(next);
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   const lockState = info?.lockState;
   const holder = lockState?.mode === 'read-only' ? lockState.holder : null;
+  const sync = info?.sync;
+  const syncLabel = sync?.status === 'synced'
+    ? 'Synced'
+    : sync?.status === 'pending'
+      ? 'Sync pending'
+      : sync?.status === 'syncing'
+        ? 'Syncing'
+        : sync?.status === 'failed'
+          ? 'Shared sync failed'
+          : sync?.status === 'local-only'
+            ? 'Local cache only'
+            : sync?.status === 'read-only'
+              ? 'Read-only'
+              : 'Direct shared file';
 
   return (
     <div className="flex flex-col gap-4">
@@ -537,11 +565,39 @@ function WorkspaceTab() {
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-muted">
-                This instance holds the edit lock, so your team sees the workspace as read-only
-                while you have the app open. Close the app to let a colleague edit. To share the
-                workspace, point every install at the same folder on your network share.
-              </p>
+              <div className="flex flex-col gap-3">
+                <p className="text-xs text-muted">
+                  This instance holds the edit lock, so your team sees the workspace as read-only
+                  while you have the app open. Close the app to let a colleague edit. To share the
+                  workspace, point every install at the same folder on your network share.
+                </p>
+                {sync && (
+                  <div className="rounded-xl border border-line bg-[var(--pf-highlight)] px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-ink">
+                          {sync.mode === 'local-cache' ? 'Local cache with shared sync' : 'Shared workspace sync'} · {syncLabel}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {sync.mode === 'local-cache'
+                            ? 'PrivacyFlow works from a local cache for speed and syncs changes back to the shared drive while the edit lock is held.'
+                            : 'PrivacyFlow is writing directly to the local workspace file.'}
+                          {sync.lastSyncedAt ? ` Last synced ${fmtDateTime(sync.lastSyncedAt)}.` : ''}
+                        </p>
+                        {sync.localCachePath && (
+                          <p className="mt-1 break-all font-mono text-[11px] text-muted">Cache: {sync.localCachePath}</p>
+                        )}
+                        {sync.lastError && <p className="mt-1 text-xs text-red-300">{sync.lastError}</p>}
+                      </div>
+                      {sync.mode === 'local-cache' && (
+                        <GlassButton className="px-3 py-1.5 text-xs" loading={syncBusy} onClick={syncNow}>
+                          <RefreshCw className="h-3.5 w-3.5" /> Sync now
+                        </GlassButton>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

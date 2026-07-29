@@ -78,6 +78,125 @@ let dbPath = resolveDbPath();
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const BACKUP_LIMIT = 30;
+const SYNC_DEBOUNCE_MS = 1500;
+
+interface WorkspaceSyncState {
+  mode: 'local-cache' | 'direct-shared' | 'read-only';
+  status: 'synced' | 'local-only' | 'pending' | 'syncing' | 'failed' | 'read-only';
+  localCachePath?: string;
+  lastSyncedAt?: string;
+  lastError?: string;
+}
+
+let syncState: WorkspaceSyncState = { mode: 'direct-shared', status: 'synced' };
+let syncTimer: NodeJS.Timeout | null = null;
+let lastLocalJson: string | null = null;
+
+function localWorkspaceCachePath(sharedPath = dbPath): string {
+  const digest = crypto.createHash('sha1').update(path.resolve(sharedPath).toLowerCase()).digest('hex').slice(0, 16);
+  const dir = path.join(app.getPath('userData'), 'workspace-cache');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, `privacyflow-${digest}.db.json`);
+}
+
+function writeAtomic(filePath: string, raw: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, raw, 'utf8');
+  fs.renameSync(tmp, filePath);
+}
+
+function isUserDataWorkspace(): boolean {
+  return path.resolve(dbPath) === path.resolve(path.join(app.getPath('userData'), 'privacyflow.db.json'));
+}
+
+function sharedRaw(): string | null {
+  return fs.existsSync(dbPath) ? fs.readFileSync(dbPath, 'utf8') : null;
+}
+
+function localRaw(): string | null {
+  const cachePath = syncState.localCachePath;
+  return cachePath && fs.existsSync(cachePath) ? fs.readFileSync(cachePath, 'utf8') : null;
+}
+
+function workspaceReadRaw(): string | null {
+  return syncState.mode === 'local-cache' ? localRaw() : sharedRaw();
+}
+
+function initializeWorkspaceCache(): void {
+  if (syncTimer) {
+    clearTimeout(syncTimer);
+    syncTimer = null;
+  }
+  lastLocalJson = null;
+  if (lockState.mode !== 'write') {
+    syncState = { mode: 'read-only', status: 'read-only' };
+    return;
+  }
+  if (isUserDataWorkspace()) {
+    syncState = { mode: 'direct-shared', status: 'synced' };
+    return;
+  }
+  const cachePath = localWorkspaceCachePath();
+  const raw = sharedRaw();
+  if (raw) {
+    writeAtomic(cachePath, raw);
+    lastLocalJson = raw;
+    syncState = {
+      mode: 'local-cache',
+      status: 'synced',
+      localCachePath: cachePath,
+      lastSyncedAt: new Date().toISOString(),
+    };
+  } else {
+    syncState = {
+      mode: 'local-cache',
+      status: 'local-only',
+      localCachePath: cachePath,
+    };
+  }
+}
+
+function syncLocalCacheNow(): void {
+  if (syncState.mode !== 'local-cache' || lockState.mode !== 'write' || !syncState.localCachePath) return;
+  if (!fs.existsSync(syncState.localCachePath)) return;
+  const raw = fs.readFileSync(syncState.localCachePath, 'utf8');
+  JSON.parse(raw);
+  if (lastLocalJson === raw && syncState.status === 'synced') return;
+  syncState = { ...syncState, status: 'syncing', lastError: undefined };
+  try {
+    writeAtomic(dbPath, raw);
+    lastLocalJson = raw;
+    syncState = {
+      ...syncState,
+      status: 'synced',
+      lastSyncedAt: new Date().toISOString(),
+      lastError: undefined,
+    };
+  } catch (e) {
+    syncState = {
+      ...syncState,
+      status: 'failed',
+      lastError: e instanceof Error ? e.message : 'Unable to sync local cache to the shared workspace.',
+    };
+    throw e;
+  }
+}
+
+function scheduleSyncLocalCache(): void {
+  if (syncState.mode !== 'local-cache' || lockState.mode !== 'write') return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncState = { ...syncState, status: 'pending', lastError: undefined };
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    try {
+      syncLocalCacheNow();
+    } catch {
+      // The sync state records the error; the next write or close retries.
+    }
+  }, SYNC_DEBOUNCE_MS);
+  syncTimer.unref?.();
+}
 
 interface BackupEntry {
   id: string;
@@ -155,8 +274,8 @@ function latestBackupMatches(raw: string): BackupEntry | null {
 }
 
 function createBackup(reason: string, content?: string): BackupEntry | null {
-  if (!content && !fs.existsSync(dbPath)) return null;
-  const raw = content ?? fs.readFileSync(dbPath, 'utf8');
+  const raw = content ?? workspaceReadRaw();
+  if (!raw) return null;
   JSON.parse(raw);
   const normalizedReason = backupReason(reason);
   if (normalizedReason === 'startup' || normalizedReason === 'auto') {
@@ -189,9 +308,13 @@ function restoreBackup(fileName: string): { restored: BackupEntry; safetyBackup:
   const raw = fs.readFileSync(backupPath, 'utf8');
   JSON.parse(raw);
   const safetyBackup = createBackup('restore-safety');
-  const tmp = `${dbPath}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, raw, 'utf8');
-  fs.renameSync(tmp, dbPath);
+  if (syncState.mode === 'local-cache' && syncState.localCachePath) {
+    writeAtomic(syncState.localCachePath, raw);
+    lastLocalJson = null;
+    syncLocalCacheNow();
+  } else {
+    writeAtomic(dbPath, raw);
+  }
   return { restored: backupEntry(fileName), safetyBackup };
 }
 
@@ -204,6 +327,7 @@ function deleteBackup(fileName: string): boolean {
 
 let lock = new WorkspaceLock(dbPath, os.userInfo().username);
 let lockState: LockState = lock.acquire();
+initializeWorkspaceCache();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -233,7 +357,7 @@ function createWindow() {
 // Read synchronously at boot so the renderer's platform layer stays simple.
 ipcMain.on('workspace:read', (event) => {
   try {
-    event.returnValue = fs.existsSync(dbPath) ? fs.readFileSync(dbPath, 'utf8') : null;
+    event.returnValue = workspaceReadRaw();
   } catch {
     event.returnValue = null;
   }
@@ -248,10 +372,13 @@ ipcMain.handle('workspace:write', async (_e, json: string) => {
         : 'Workspace is read-only.',
     );
   }
-  // Write-then-rename so a crash mid-write can't corrupt the shared file.
-  const tmp = `${dbPath}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, json, 'utf8');
-  fs.renameSync(tmp, dbPath);
+  // Write-then-rename so a crash mid-write can't corrupt the local cache or shared file.
+  if (syncState.mode === 'local-cache' && syncState.localCachePath) {
+    writeAtomic(syncState.localCachePath, json);
+    scheduleSyncLocalCache();
+  } else {
+    writeAtomic(dbPath, json);
+  }
   try {
     createBackup('auto', json);
   } catch {
@@ -264,11 +391,13 @@ ipcMain.handle('workspace:lockStatus', async () => lockState);
 
 ipcMain.handle('workspace:recheckLock', async () => {
   lockState = lock.recheck();
+  initializeWorkspaceCache();
   return lockState;
 });
 
 ipcMain.handle('workspace:claimStale', async () => {
   lockState = lock.claimStale();
+  initializeWorkspaceCache();
   return lockState;
 });
 
@@ -276,7 +405,18 @@ ipcMain.handle('workspace:info', async () => ({
   dbPath,
   lockState,
   persisted: readWorkspacePreference() === dbPath || !!process.env.PRIVACYFLOW_WORKSPACE,
+  sync: syncState,
 }));
+
+ipcMain.handle('workspace:syncNow', async () => {
+  syncLocalCacheNow();
+  return {
+    dbPath,
+    lockState,
+    persisted: readWorkspacePreference() === dbPath || !!process.env.PRIVACYFLOW_WORKSPACE,
+    sync: syncState,
+  };
+});
 
 // Let the user repoint the workspace at a different (e.g. shared) folder from
 // Settings. Releases the current lock, switches path, and re-acquires. The
@@ -293,11 +433,17 @@ ipcMain.handle('workspace:choosePath', async () => {
   const nextPath = path.join(result.filePaths[0], 'privacyflow.db.json');
   if (nextPath === dbPath) return { dbPath, lockState, changed: false };
 
+  try {
+    syncLocalCacheNow();
+  } catch {
+    // Keep moving; the previous workspace local cache is retained for recovery.
+  }
   lock.release();
   dbPath = nextPath;
   writeWorkspacePreference(dbPath);
   lock = new WorkspaceLock(dbPath, os.userInfo().username);
   lockState = lock.acquire();
+  initializeWorkspaceCache();
   try {
     createBackup('auto');
   } catch {
@@ -575,9 +721,23 @@ app.whenReady().then(() => {
   });
 });
 
+function flushAndReleaseLock(): void {
+  try {
+    if (syncTimer) {
+      clearTimeout(syncTimer);
+      syncTimer = null;
+    }
+    syncLocalCacheNow();
+  } catch {
+    // Local cache remains on disk; do not prevent app shutdown.
+  } finally {
+    lock.release();
+  }
+}
+
 app.on('window-all-closed', () => {
-  lock.release();
+  flushAndReleaseLock();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => lock.release());
+app.on('before-quit', () => flushAndReleaseLock());

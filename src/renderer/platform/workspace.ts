@@ -20,6 +20,13 @@ export interface WorkspaceInfo {
   dbPath: string;
   lockState: WorkspaceLockState;
   persisted?: boolean;
+  sync?: {
+    mode: 'local-cache' | 'direct-shared' | 'read-only';
+    status: 'synced' | 'local-only' | 'pending' | 'syncing' | 'failed' | 'read-only';
+    localCachePath?: string;
+    lastSyncedAt?: string;
+    lastError?: string;
+  };
 }
 
 export interface ChoosePathResult {
@@ -60,6 +67,7 @@ export interface WorkspaceBridge {
   recheckLock: () => Promise<WorkspaceLockState>;
   claimStale: () => Promise<WorkspaceLockState>;
   info?: () => Promise<WorkspaceInfo>;
+  syncNow?: () => Promise<WorkspaceInfo>;
   choosePath?: () => Promise<ChoosePathResult | null>;
 }
 
@@ -235,6 +243,14 @@ export async function workspaceInfo(): Promise<WorkspaceInfo | null> {
   const bridge = workspaceBridge();
   if (!bridge?.info) return null;
   const info = await bridge.info();
+  cachedLock = info.lockState;
+  return info;
+}
+
+export async function syncWorkspaceNow(): Promise<WorkspaceInfo | null> {
+  const bridge = workspaceBridge();
+  if (!bridge?.syncNow) return workspaceInfo();
+  const info = await bridge.syncNow();
   cachedLock = info.lockState;
   return info;
 }

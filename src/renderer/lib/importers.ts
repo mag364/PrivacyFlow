@@ -32,11 +32,26 @@ function excelSerialDate(value: number): string | undefined {
   return date.toISOString().slice(0, 10);
 }
 
+function shortUsDate(value: string): string | undefined {
+  const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!match) return undefined;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const rawYear = Number(match[3]);
+  const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2200) return undefined;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return undefined;
+  return date.toISOString().slice(0, 10);
+}
+
 export function normalizeImportedDate(value: string): string | undefined {
   const clean = value.trim();
   if (!clean) return undefined;
   if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(clean)) return clean;
   if (/^\d{5}(?:\.0+)?$/.test(clean)) return excelSerialDate(Number(clean));
+  const shortDate = shortUsDate(clean);
+  if (shortDate) return shortDate;
   const parsed = new Date(clean);
   if (Number.isNaN(parsed.getTime())) return undefined;
   const year = parsed.getFullYear();
@@ -202,6 +217,31 @@ export function caseInputFromRow(row: TableRow, defaults: { jurisdiction: string
   const lastName = pick(row, ['Subject', 'Last Name', 'Requester Last Name', 'Name', 'Requester']);
   const email = pick(row, ['Email', 'Requester Email', 'Email Address']);
   const requestTypes = splitMulti(pick(row, ['Types', 'Request Types', 'Type']));
+  const emailedFA = normalizeImportedDate(pick(row, ['Emailed FA']));
+  const dateClientServiceReceivedEmail = normalizeImportedDate(pick(row, [
+    "Client Svcs. rec'd email",
+    'Client Svcs. rec’d email',
+    'Client Svcs. rec’d email date',
+    'Client Svcs. received email',
+    'Client Services Received',
+    'Date Received',
+  ]));
+  const dateDppReceivedEmail = normalizeImportedDate(pick(row, [
+    "DPP rec'd email from Client Svcs.",
+    'DPP rec’d email from Client Svcs.',
+    "DPP rec'd email date",
+    'DPP rec’d email date',
+    'DPP Received',
+    'Date DPP Received',
+  ]));
+  const standardResponseSent = normalizeImportedDate(pick(row, ['Standard Response sent', 'Standard Response Sent']));
+  const forwardedEmailToRon = normalizeImportedDate(pick(row, [
+    'Forwarded email to Ron K.',
+    'Forwarded Email to Ron K.',
+    'Forwarded to Ron',
+    'Forwarded Email To Ron',
+  ]));
+  const followUpEmailSent = normalizeImportedDate(pick(row, ['Follow-up sent', 'Follow-up Email Sent']));
   return {
     caseNumberOverride: pick(row, ['Request', 'Case Number', 'CaseNumber']) || undefined,
     requestTypes: requestTypes.length ? requestTypes : ['Access'],
@@ -221,14 +261,14 @@ export function caseInputFromRow(row: TableRow, defaults: { jurisdiction: string
       authorizedAgent: /^true|yes|1$/i.test(pick(row, ['Authorized Agent'])),
       identifiers: requestId ? [{ label: 'Request ID', value: requestId }] : [],
       clientCenterStatus: pick(row, ['Client Center Status']) || undefined,
-      emailedFA: pick(row, ['Emailed FA']) || undefined,
+      emailedFA,
     },
     intakeDates: {
-      dateClientServiceReceivedEmail: pick(row, ['Client Svcs. rec’d email date', 'Client Services Received', 'Date Received']) || undefined,
-      dateDppReceivedEmail: pick(row, ['DPP rec’d email date', 'DPP Received', 'Date DPP Received']) || undefined,
-      standardResponseSent: pick(row, ['Standard Response Sent']) || undefined,
-      forwardedEmailToRon: pick(row, ['Forwarded to Ron', 'Forwarded Email To Ron']) || undefined,
-      followUpEmailSent: pick(row, ['Follow-up Email Sent']) || undefined,
+      dateClientServiceReceivedEmail,
+      dateDppReceivedEmail,
+      standardResponseSent,
+      forwardedEmailToRon,
+      followUpEmailSent,
     },
   };
 }

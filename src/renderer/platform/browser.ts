@@ -796,8 +796,11 @@ async function addImportedCase(
   status: CaseStatus = 'New',
 ): Promise<DsrCase> {
   const now = new Date();
+  const received = input.intakeDates?.dateDppReceivedEmail
+    ? new Date(input.intakeDates.dateDppReceivedEmail)
+    : now;
   const rule = ruleFor(d.settings, String(input.jurisdiction));
-  const due = computeDueDate(now, { periodDays: rule.periodDays, businessDays: rule.businessDays });
+  const due = computeDueDate(received, { periodDays: rule.periodDays, businessDays: rule.businessDays });
   const caseNumber = input.caseNumberOverride?.trim() || nextCaseNumber(d);
   const c: DsrCase = {
     id: uid(),
@@ -816,7 +819,7 @@ async function addImportedCase(
     subject: input.subject,
     verificationStatus: 'Not Started',
     sla: {
-      receivedDate: now.toISOString(),
+      receivedDate: received.toISOString(),
       originalDueDate: due.toISOString(),
       currentDueDate: due.toISOString(),
       pausedTotalDays: 0,
@@ -1269,10 +1272,13 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         assertWritable();
         const d = db();
         const now = new Date();
+        const received = input.intakeDates?.dateDppReceivedEmail
+          ? new Date(input.intakeDates.dateDppReceivedEmail)
+          : now;
         const rule = ruleFor(d.settings, String(input.jurisdiction));
-        const due = computeDueDate(now, { periodDays: rule.periodDays, businessDays: rule.businessDays });
+        const due = computeDueDate(received, { periodDays: rule.periodDays, businessDays: rule.businessDays });
         const sla: SlaInfo = {
-          receivedDate: now.toISOString(),
+          receivedDate: received.toISOString(),
           originalDueDate: due.toISOString(),
           currentDueDate: due.toISOString(),
           pausedTotalDays: 0,

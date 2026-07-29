@@ -32,6 +32,12 @@ interface ProjectGroup {
 
 const COLLAPSED_DEFAULT = true;
 
+function saneYear(value?: string): number | null {
+  const date = value ? new Date(value) : null;
+  const year = date ? date.getFullYear() : NaN;
+  return Number.isFinite(year) && year >= 2000 && year <= 2200 ? year : null;
+}
+
 export function TasksPage() {
   const { year: yearParam } = useParams();
   const year = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : null;
@@ -60,8 +66,7 @@ export function TasksPage() {
 
   if (!projects) return <Spinner label="Loading projects…" />;
 
-  const yearOf = (p: Project) =>
-    new Date(p.dateNotificationReceived ?? p.createdAt).getFullYear();
+  const yearOf = (p: Project) => saneYear(p.dateNotificationReceived) ?? saneYear(p.createdAt);
 
   const yearProjects = year ? projects.filter((p) => yearOf(p) === year) : projects;
 

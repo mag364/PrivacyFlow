@@ -584,6 +584,36 @@ function migrateRequesterFirstNameTemplates(d: Db): boolean {
   return changed;
 }
 
+function excelSerialDate(value: number): string | undefined {
+  if (!Number.isFinite(value) || value < 1 || value > 80000) return undefined;
+  const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(value) * 86_400_000);
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeProjectDate(value?: string): string | undefined {
+  const clean = String(value || '').trim();
+  if (!clean) return undefined;
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(clean)) return clean;
+  if (/^\d{5}(?:\.0+)?$/.test(clean)) return excelSerialDate(Number(clean));
+  const parsed = new Date(clean);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  const year = parsed.getFullYear();
+  if (year < 1900 || year > 2200) return undefined;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function migrateProjectDates(d: Db): boolean {
+  let changed = false;
+  for (const project of d.projects ?? []) {
+    const normalized = normalizeProjectDate(project.dateNotificationReceived);
+    if (normalized !== project.dateNotificationReceived) {
+      project.dateNotificationReceived = normalized;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function migrateRequestTypeNames(d: Db): boolean {
   let changed = false;
   for (const c of d.cases) {
@@ -625,7 +655,8 @@ function load(): Db | null {
     const workflowMigrated = migrateWorkflow(cache);
     const templateMigrated = migrateRequesterFirstNameTemplates(cache);
     const requestTypeMigrated = migrateRequestTypeNames(cache);
-    const migrated = settingsMigrated || workflowMigrated || templateMigrated || requestTypeMigrated;
+    const projectDateMigrated = migrateProjectDates(cache);
+    const migrated = settingsMigrated || workflowMigrated || templateMigrated || requestTypeMigrated || projectDateMigrated;
     if (migrated && !isReadOnly()) save(cache);
     return cache;
   } catch {

@@ -26,6 +26,24 @@ export function splitMulti(value: string): string[] {
     .filter(Boolean);
 }
 
+function excelSerialDate(value: number): string | undefined {
+  if (!Number.isFinite(value) || value < 1 || value > 80000) return undefined;
+  const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(value) * 86_400_000);
+  return date.toISOString().slice(0, 10);
+}
+
+export function normalizeImportedDate(value: string): string | undefined {
+  const clean = value.trim();
+  if (!clean) return undefined;
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(clean)) return clean;
+  if (/^\d{5}(?:\.0+)?$/.test(clean)) return excelSerialDate(Number(clean));
+  const parsed = new Date(clean);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  const year = parsed.getFullYear();
+  if (year < 1900 || year > 2200) return undefined;
+  return parsed.toISOString().slice(0, 10);
+}
+
 export function parseDelimited(text: string): TableRow[] {
   const delimiter = text.includes('\t') && !text.includes(',') ? '\t' : ',';
   const rows: string[][] = [];
@@ -216,12 +234,13 @@ export function caseInputFromRow(row: TableRow, defaults: { jurisdiction: string
 }
 
 export function projectInputFromRow(row: TableRow): NewProjectInput {
+  const notificationDate = normalizeImportedDate(pick(row, ['Date Notification Rec’d', 'Date Notification Received', 'Date Received']));
   return {
     projectNumber: pick(row, ['Project Number', 'Project']) || undefined,
     projectName: pick(row, ['Project Name', 'Name', 'Parent Project']) || 'Imported project',
     status: pick(row, ['Status']) || 'New',
     source: pick(row, ['Source']) || 'DD',
-    dateNotificationReceived: pick(row, ['Date Notification Rec’d', 'Date Notification Received', 'Date Received']) || undefined,
+    dateNotificationReceived: notificationDate,
     notificationCancelled: /^true|yes|1$/i.test(pick(row, ['Notification Cancelled', 'Cancelled'])),
     ritmNumber: pick(row, ['RITM Number', 'RITM']) || undefined,
     investmentClass: pick(row, ['Investment Class']) || 'Not Listed',

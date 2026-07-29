@@ -265,12 +265,18 @@ function YearAccordion({
 }
 
 // Years for each section, derived from record dates.
+function saneYear(value?: string): number | null {
+  const date = value ? new Date(value) : null;
+  const year = date ? date.getFullYear() : NaN;
+  return Number.isFinite(year) && year >= 2000 && year <= 2200 ? year : null;
+}
+
 const loadRequestYears = async () => {
   const cases = await platform().cases.list();
   const counts = new Map<number, number>();
   for (const c of cases) {
-    const y = new Date(c.sla.receivedDate).getFullYear();
-    if (Number.isFinite(y)) counts.set(y, (counts.get(y) ?? 0) + 1);
+    const y = saneYear(c.sla.receivedDate);
+    if (y) counts.set(y, (counts.get(y) ?? 0) + 1);
   }
   return Array.from(counts, ([year, count]) => ({ year, count }));
 };
@@ -281,8 +287,8 @@ const loadProjectYears = async () => {
   for (const p of projects) {
     // Group by notification date when present; cancelled/undated projects
     // fall back to the year they were logged.
-    const y = new Date(p.dateNotificationReceived ?? p.createdAt).getFullYear();
-    if (Number.isFinite(y)) counts.set(y, (counts.get(y) ?? 0) + 1);
+    const y = saneYear(p.dateNotificationReceived) ?? saneYear(p.createdAt);
+    if (y) counts.set(y, (counts.get(y) ?? 0) + 1);
   }
   return Array.from(counts, ([year, count]) => ({ year, count }));
 };

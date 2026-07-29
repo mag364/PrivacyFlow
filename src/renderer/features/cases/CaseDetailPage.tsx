@@ -53,6 +53,8 @@ interface EditDraft {
   dateDppReceivedEmail: string;
   standardResponseSent: string;
   forwardedEmailToRon: string;
+  followUpEmailSent: string;
+  closedDate: string;
 }
 
 export function CaseDetailPage() {
@@ -148,6 +150,8 @@ export function CaseDetailPage() {
       dateDppReceivedEmail: (c!.intakeDates?.dateDppReceivedEmail ?? '').slice(0, 10),
       standardResponseSent: (c!.intakeDates?.standardResponseSent ?? '').slice(0, 10),
       forwardedEmailToRon: (c!.intakeDates?.forwardedEmailToRon ?? '').slice(0, 10),
+      followUpEmailSent: (c!.intakeDates?.followUpEmailSent ?? '').slice(0, 10),
+      closedDate: (c!.sla.closureDate ?? c!.resolutionDate ?? '').slice(0, 10),
     });
     setSaveError('');
     setEditing(true);
@@ -185,7 +189,14 @@ export function CaseDetailPage() {
           dateDppReceivedEmail: draft.dateDppReceivedEmail || undefined,
           standardResponseSent: draft.standardResponseSent || undefined,
           forwardedEmailToRon: draft.forwardedEmailToRon || undefined,
+          followUpEmailSent: draft.followUpEmailSent || undefined,
         },
+        sla: {
+          ...c!.sla,
+          closureDate: draft.closedDate || undefined,
+          fulfillmentDate: draft.closedDate || undefined,
+        },
+        resolutionDate: draft.closedDate || undefined,
       });
       setEditing(false);
       setDraft(null);
@@ -407,7 +418,7 @@ export function CaseDetailPage() {
                       <Row k="Logged" v={fmtDate(c.createdAt)} />
                     </dl>
                   </GlassPanel>
-                  {c.intakeDates && Object.values(c.intakeDates).some(Boolean) && (
+                  {((c.intakeDates && Object.values(c.intakeDates).some(Boolean)) || c.sla.closureDate || c.resolutionDate) && (
                     <GlassPanel>
                       <h3 className="mb-3 text-sm font-semibold text-ink">Intake timeline</h3>
                       <dl className="grid gap-2 text-sm sm:grid-cols-2">
@@ -415,6 +426,8 @@ export function CaseDetailPage() {
                         <Row k="DPP rec'd email from Client Svcs." v={fmtDate(c.intakeDates.dateDppReceivedEmail)} />
                         <Row k="Standard Response sent" v={fmtDate(c.intakeDates.standardResponseSent)} />
                         <Row k="Forwarded email to Ron K." v={fmtDate(c.intakeDates.forwardedEmailToRon)} />
+                        <Row k="Follow-up sent" v={fmtDate(c.intakeDates.followUpEmailSent)} />
+                        <Row k="Closed" v={fmtDate(c.sla.closureDate ?? c.resolutionDate)} />
                       </dl>
                     </GlassPanel>
                   )}
@@ -509,6 +522,12 @@ export function CaseDetailPage() {
                       </Field>
                       <Field label="Forwarded email to Ron K.">
                         <GlassInput type="date" value={draft.forwardedEmailToRon} onChange={(e) => setD({ forwardedEmailToRon: e.target.value })} />
+                      </Field>
+                      <Field label="Follow-up sent">
+                        <GlassInput type="date" value={draft.followUpEmailSent} onChange={(e) => setD({ followUpEmailSent: e.target.value })} />
+                      </Field>
+                      <Field label="Closed">
+                        <GlassInput type="date" value={draft.closedDate} onChange={(e) => setD({ closedDate: e.target.value })} />
                       </Field>
                     </div>
                   </GlassPanel>

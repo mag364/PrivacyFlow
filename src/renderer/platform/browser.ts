@@ -1219,6 +1219,8 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           const hasForwardedToRon = !!c.intakeDates?.forwardedEmailToRon;
           const hadFollowUp = !!before.intakeDates?.followUpEmailSent;
           const hasFollowUp = !!c.intakeDates?.followUpEmailSent;
+          const hadClosed = !!before.sla?.closureDate;
+          const hasClosed = !!c.sla?.closureDate;
           if (!hadStandardResponse && hasStandardResponse) {
             await runAutomations(d, c, 'status.changed', { toStatus: 'Email Response Sent' });
           }
@@ -1227,6 +1229,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           }
           if (!hadFollowUp && hasFollowUp) {
             await runAutomations(d, c, 'status.changed', { toStatus: 'Follow-up Email Sent' });
+          }
+          if (!hadClosed && hasClosed) {
+            await runAutomations(d, c, 'status.changed', { toStatus: 'Closed' });
           }
         }
         save(d);

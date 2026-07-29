@@ -13,7 +13,7 @@ import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared
 import type {
   PrivacyFlowAPI, DashboardMetrics, NewCaseInput, NewProjectInput, CompleteSetupInput,
   LoginResult, NameValue, CreateUserInput, CreateUserResult, UpdateUserInput,
-  AddDocumentInput, AddCommunicationInput, ImportSummary,
+  AddDocumentInput, AddCommunicationInput, ImportSummary, RetentionCleanupSummary,
 } from './types';
 import {
   type Db, appendAudit, createSeed, nextActionFor, nextCaseNumber, nextProjectNumber,
@@ -116,6 +116,7 @@ function defaultSettings(): OrgSettings {
     caseNumberPrefix: APP_CONFIG.defaults.caseNumberPrefix,
     defaultJurisdiction: APP_CONFIG.defaults.defaultJurisdiction,
     autoLockMinutes: APP_CONFIG.defaults.autoLockMinutes,
+    retentionYears: APP_CONFIG.defaults.retentionYears,
     theme: 'dark',
     setupComplete: false,
     demoDataInstalled: false,
@@ -563,6 +564,7 @@ function load(): Db | null {
     const d = defaultSettings();
     const s = cache.settings as OrgSettings;
     if (!Array.isArray(s.slaRules) || !s.slaRules.length) s.slaRules = d.slaRules;
+    if (typeof s.retentionYears !== 'number' || s.retentionYears < 1) s.retentionYears = d.retentionYears;
     if (!Array.isArray(s.reminderCadenceDays)) s.reminderCadenceDays = d.reminderCadenceDays;
     if (typeof s.dueSoonThresholdDays !== 'number') s.dueSoonThresholdDays = d.dueSoonThresholdDays;
     if (typeof s.autoPauseSla !== 'boolean') s.autoPauseSla = d.autoPauseSla;
@@ -812,6 +814,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           caseNumberPrefix: input.caseNumberPrefix ?? APP_CONFIG.defaults.caseNumberPrefix,
           defaultJurisdiction: input.defaultJurisdiction ?? APP_CONFIG.defaults.defaultJurisdiction,
           autoLockMinutes: input.autoLockMinutes ?? APP_CONFIG.defaults.autoLockMinutes,
+          retentionYears: APP_CONFIG.defaults.retentionYears,
           theme: input.theme ?? 'dark',
           demoDataInstalled: input.demoDataInstalled ?? false,
           setupComplete: true,
@@ -836,6 +839,56 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         });
         save(d);
         return clone(d.settings);
+      },
+      async applyRetentionCleanup(): Promise<RetentionCleanupSummary> {
+        assertWritable();
+        const d = db();
+        const actor = actorOf(d);
+        const retentionYears = Math.max(1, Math.floor(d.settings.retentionYears || APP_CONFIG.defaults.retentionYears));
+        const cutoff = new Date();
+        cutoff.setFullYear(cutoff.getFullYear() - retentionYears);
+        const cutoffDate = cutoff.toISOString();
+        const isOld = (value?: string) => {
+          if (!value) return false;
+          const date = new Date(value);
+          return !Number.isNaN(date.getTime()) && date < cutoff;
+        };
+
+        const caseIds = new Set(
+          d.cases
+            .filter((c) => isOld(c.resolutionDate ?? c.sla.closureDate ?? c.createdAt))
+            .map((c) => c.id),
+        );
+        const projectIds = new Set(
+          d.projects
+            .filter((p) => isOld(p.createdAt))
+            .map((p) => p.id),
+        );
+
+        const casesDeleted = caseIds.size;
+        const projectsDeleted = projectIds.size;
+        if (casesDeleted || projectsDeleted) {
+          d.cases = d.cases.filter((c) => !caseIds.has(c.id));
+          d.tasks = d.tasks.filter((t) => !caseIds.has(t.caseId));
+          d.notes = d.notes.filter((n) => !caseIds.has(n.caseId));
+          d.communications = d.communications.filter((m) => !caseIds.has(m.caseId) && !projectIds.has(m.caseId));
+          d.decisions = d.decisions.filter((decision) => !caseIds.has(decision.caseId));
+          d.documents = d.documents.filter((doc) => !caseIds.has(doc.caseId));
+          d.statusHistory = d.statusHistory.filter((entry) => !caseIds.has(entry.caseId));
+          d.slaHistory = d.slaHistory.filter((entry) => !caseIds.has(entry.caseId));
+          d.projects = d.projects.filter((p) => !projectIds.has(p.id));
+        }
+
+        await appendAudit(d, actor, {
+          category: 'System',
+          action: 'retention.cleanup',
+          entityType: 'settings',
+          entityId: 'workspace',
+          summary: `Retention cleanup removed ${casesDeleted} request${casesDeleted === 1 ? '' : 's'} and ${projectsDeleted} project${projectsDeleted === 1 ? '' : 's'}`,
+          newValue: { retentionYears, cutoffDate, casesDeleted, projectsDeleted },
+        });
+        save(d);
+        return { cutoffDate, casesDeleted, projectsDeleted };
       },
       async resetApplication() {
         assertWritable();

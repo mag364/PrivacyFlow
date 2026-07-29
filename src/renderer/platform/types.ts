@@ -75,6 +75,12 @@ export interface ImportSummary {
   errors: string[];
 }
 
+export interface RetentionCleanupSummary {
+  cutoffDate: string;
+  casesDeleted: number;
+  projectsDeleted: number;
+}
+
 export interface TrackingExport {
   version: string;
   exportedAt: string;
@@ -132,6 +138,7 @@ export interface PrivacyFlowAPI {
     settings: () => Promise<OrgSettings>;
     completeSetup: (input: CompleteSetupInput) => Promise<OrgSettings>;
     updateSettings: (patch: Partial<OrgSettings>) => Promise<OrgSettings>;
+    applyRetentionCleanup: () => Promise<RetentionCleanupSummary>;
     resetApplication: () => Promise<void>;
     exportTracking: () => Promise<TrackingExport>;
     importTracking: (input: { cases?: DsrCase[]; projects?: Project[] }) => Promise<ImportSummary>;

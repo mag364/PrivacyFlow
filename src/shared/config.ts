@@ -4,7 +4,7 @@
 // -----------------------------------------------------------------------------
 
 export const APP_CONFIG = {
-  version: '1.0.50',
+  version: '1.0.51',
   productName: 'PrivacyFlow',
   tagline: 'DSR Tracking',
   updates: {
@@ -23,6 +23,7 @@ export const APP_CONFIG = {
     caseNumberSequenceLength: 7,
     defaultJurisdiction: 'US',
     autoLockMinutes: 15,
+    retentionYears: 5,
   },
   slaRules: [
     { jurisdiction: 'GDPR (EU/EEA)', periodDays: 30, businessDays: false, note: 'One month, extendable by two further months for complex requests.' },

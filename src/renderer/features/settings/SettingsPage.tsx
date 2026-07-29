@@ -986,6 +986,9 @@ export function SettingsPage() {
   const [users, setUsers] = React.useState<User[]>([]);
   const [saved, setSaved] = React.useState(false);
   const [userError, setUserError] = React.useState('');
+  const [retentionBusy, setRetentionBusy] = React.useState(false);
+  const [retentionResult, setRetentionResult] = React.useState('');
+  const [retentionError, setRetentionError] = React.useState('');
 
   // M365 connect form state
   const [connecting, setConnecting] = React.useState(false);
@@ -1029,6 +1032,30 @@ export function SettingsPage() {
     )) {
       await platform().system.resetApplication();
       window.location.reload();
+    }
+  }
+
+  async function applyRetentionCleanup() {
+    const years = Math.max(1, Math.floor(Number(settings!.retentionYears) || APP_CONFIG.defaults.retentionYears));
+    if (!window.confirm(
+      `Delete request and project records older than ${years} year${years === 1 ? '' : 's'}? ` +
+      'This also removes attached notes, communications, documents, and history rows. Create a backup first if you need a recovery point.',
+    )) return;
+    setRetentionBusy(true);
+    setRetentionResult('');
+    setRetentionError('');
+    try {
+      const savedSettings = await platform().system.updateSettings({ ...settings!, retentionYears: years });
+      setSettings(savedSettings);
+      const summary = await platform().system.applyRetentionCleanup();
+      setRetentionResult(
+        `Cleanup complete: deleted ${summary.casesDeleted} request${summary.casesDeleted === 1 ? '' : 's'} ` +
+        `and ${summary.projectsDeleted} project${summary.projectsDeleted === 1 ? '' : 's'} older than ${fmtDateTime(summary.cutoffDate)}.`,
+      );
+    } catch (e) {
+      setRetentionError(e instanceof Error ? e.message : 'Unable to apply retention cleanup.');
+    } finally {
+      setRetentionBusy(false);
     }
   }
 
@@ -1303,6 +1330,44 @@ export function SettingsPage() {
               <Field label="Auto-lock (minutes)">
                 <GlassInput disabled={!editable} type="number" value={settings.autoLockMinutes} onChange={(e) => setSettings({ ...settings, autoLockMinutes: Number(e.target.value) })} />
               </Field>
+            </div>
+            <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
+              <div className="mb-3">
+                <h4 className="text-sm font-semibold text-ink">Retention</h4>
+                <p className="text-xs text-muted">
+                  Choose how many years PrivacyFlow should keep request and project records before they are eligible for deletion.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[12rem_1fr]">
+                <Field label="Retention period">
+                  <GlassInput
+                    disabled={!editable}
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={settings.retentionYears}
+                    onChange={(e) => setSettings({
+                      ...settings,
+                      retentionYears: Math.max(1, Math.floor(Number(e.target.value) || APP_CONFIG.defaults.retentionYears)),
+                    })}
+                  />
+                </Field>
+                <div className="flex items-end">
+                  <p className="pb-2 text-xs text-muted">
+                    Records older than this many years can be deleted using the cleanup action below. Default is 5 years.
+                  </p>
+                </div>
+              </div>
+              {editable && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <GlassButton variant="danger" loading={retentionBusy} onClick={applyRetentionCleanup}>
+                    <Trash2 className="h-4 w-4" /> Delete records older than retention period
+                  </GlassButton>
+                  <p className="text-[11px] text-muted">Audit events remain so the audit chain stays verifiable.</p>
+                </div>
+              )}
+              {retentionResult && <p className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{retentionResult}</p>}
+              {retentionError && <p className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{retentionError}</p>}
             </div>
             {editable && (
               <div className="flex items-center gap-2 pt-1">

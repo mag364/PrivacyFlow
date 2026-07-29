@@ -316,6 +316,7 @@ export interface OrgSettings {
   caseNumberPrefix: string;
   defaultJurisdiction: string;
   autoLockMinutes: number;
+  retentionYears: number;
   theme: string;
   setupComplete: boolean;
   demoDataInstalled: boolean;

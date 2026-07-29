@@ -125,7 +125,7 @@ export function CasesPage() {
               </GlassButton>
             )}
             <GlassButton onClick={exportCsv}><Download className="h-4 w-4" /> Export</GlassButton>
-            {can(user?.role, 'cases.create') && (
+            {can(user?.role, 'requests.create') && (
               <GlassButton variant="primary" onClick={() => navigate('/cases/new')}>
                 <Plus className="h-4 w-4" /> New request
               </GlassButton>

@@ -2,9 +2,10 @@ import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { platform } from './platform';
 import { refreshLockState } from './platform/workspace';
-import { useAuth } from './store/auth';
-import { AppShell } from './layouts/AppShell';
-import { Spinner } from './components/glass';
+import { can, useAuth } from './store/auth';
+import { AppShell, PageHeader } from './layouts/AppShell';
+import { GlassPanel, Spinner } from './components/glass';
+import type { Permission } from '@shared/constants';
 import { LoginPage } from './features/auth/LoginPage';
 import { SetupPage } from './features/setup/SetupPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
@@ -23,6 +24,29 @@ function FullScreen({ children }: { children: React.ReactNode }) {
   return <div className="grid h-screen w-screen place-items-center">{children}</div>;
 }
 
+function AccessDenied() {
+  return (
+    <div>
+      <PageHeader title="Access denied" subtitle="Your role does not include permission to open this area." />
+      <GlassPanel>
+        <p className="text-sm text-muted">Contact an administrator if you need access.</p>
+      </GlassPanel>
+    </div>
+  );
+}
+
+function RequirePermission({
+  anyOf,
+  children,
+}: {
+  anyOf: Permission[];
+  children: React.ReactElement;
+}) {
+  const { user } = useAuth();
+  if (!anyOf.some((permission) => can(user?.role, permission))) return <AccessDenied />;
+  return children;
+}
+
 function Protected() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
@@ -30,18 +54,18 @@ function Protected() {
     <AppShell>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/cases" element={<CasesPage />} />
-        <Route path="/cases/year/:year" element={<CasesPage />} />
-        <Route path="/cases/new" element={<NewCasePage />} />
-        <Route path="/cases/:id" element={<CaseDetailPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/tasks/year/:year" element={<TasksPage />} />
-        <Route path="/projects/new" element={<NewProjectPage />} />
-        <Route path="/projects/:id" element={<ProjectDetailPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/automation" element={<AutomationPage />} />
-        <Route path="/audit" element={<AuditPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/cases" element={<RequirePermission anyOf={['requests.view']}><CasesPage /></RequirePermission>} />
+        <Route path="/cases/year/:year" element={<RequirePermission anyOf={['requests.view']}><CasesPage /></RequirePermission>} />
+        <Route path="/cases/new" element={<RequirePermission anyOf={['requests.create']}><NewCasePage /></RequirePermission>} />
+        <Route path="/cases/:id" element={<RequirePermission anyOf={['requests.view']}><CaseDetailPage /></RequirePermission>} />
+        <Route path="/tasks" element={<RequirePermission anyOf={['projects.view']}><TasksPage /></RequirePermission>} />
+        <Route path="/tasks/year/:year" element={<RequirePermission anyOf={['projects.view']}><TasksPage /></RequirePermission>} />
+        <Route path="/projects/new" element={<RequirePermission anyOf={['projects.create']}><NewProjectPage /></RequirePermission>} />
+        <Route path="/projects/:id" element={<RequirePermission anyOf={['projects.view']}><ProjectDetailPage /></RequirePermission>} />
+        <Route path="/reports" element={<RequirePermission anyOf={['reports.view']}><ReportsPage /></RequirePermission>} />
+        <Route path="/automation" element={<RequirePermission anyOf={['settings.manage']}><AutomationPage /></RequirePermission>} />
+        <Route path="/audit" element={<RequirePermission anyOf={['audit.view']}><AuditPage /></RequirePermission>} />
+        <Route path="/settings" element={<RequirePermission anyOf={['settings.manage', 'users.manage']}><SettingsPage /></RequirePermission>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

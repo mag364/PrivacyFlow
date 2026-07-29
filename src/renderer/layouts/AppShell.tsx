@@ -7,9 +7,10 @@ import {
   ChevronDown, CalendarDays, PlusCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useAuth } from '../store/auth';
+import { can, useAuth } from '../store/auth';
 import { platform } from '../platform';
 import { ROLE_LABELS } from '@shared/constants';
+import type { Permission } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
 import { GlassButton, GlassInput } from '../components/glass';
 import { initials, fmtDateTime } from '../lib/format';
@@ -19,13 +20,23 @@ import {
   type WorkspaceLockState,
 } from '../platform/workspace';
 
-const NAV = [
+const NAV: {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+  anyOf?: Permission[];
+}[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/automation', label: 'Automation', icon: Workflow },
-  { to: '/audit', label: 'Audit', icon: ShieldCheck },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/reports', label: 'Reports', icon: BarChart3, anyOf: ['reports.view'] },
+  { to: '/automation', label: 'Automation', icon: Workflow, anyOf: ['settings.manage'] },
+  { to: '/audit', label: 'Audit', icon: ShieldCheck, anyOf: ['audit.view'] },
+  { to: '/settings', label: 'Settings', icon: Settings, anyOf: ['settings.manage', 'users.manage'] },
 ];
+
+function hasAnyPermission(role: Parameters<typeof can>[0], anyOf?: Permission[]): boolean {
+  return !anyOf || anyOf.some((permission) => can(role, permission));
+}
 
 // Years the user has explicitly added even though they hold no records yet
 // (e.g. an archive year they intend to import into). Requests and projects
@@ -348,6 +359,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const lockState = useLockState();
   const readOnly = lockState.mode === 'read-only';
   const holder = readOnly ? lockState.holder : null;
+  const role = user?.role;
 
   async function handleLogout() {
     await logout();
@@ -366,7 +378,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
-          {NAV.slice(0, 1).map(({ to, label, icon: Icon, end }) => (
+          {NAV.slice(0, 1).filter(({ anyOf }) => hasAnyPermission(role, anyOf)).map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -385,23 +397,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </NavLink>
           ))}
 
-          <YearAccordion
-            label="Requests"
-            icon={FolderKanban}
-            basePath="/cases"
-            extraYearsKey={EXTRA_REQUEST_YEARS_KEY}
-            loadYears={loadRequestYears}
-          />
+          {can(role, 'requests.view') && (
+            <YearAccordion
+              label="Requests"
+              icon={FolderKanban}
+              basePath="/cases"
+              extraYearsKey={EXTRA_REQUEST_YEARS_KEY}
+              loadYears={loadRequestYears}
+            />
+          )}
 
-          <YearAccordion
-            label="Projects"
-            icon={ListChecks}
-            basePath="/tasks"
-            extraYearsKey={EXTRA_PROJECT_YEARS_KEY}
-            loadYears={loadProjectYears}
-          />
+          {can(role, 'projects.view') && (
+            <YearAccordion
+              label="Projects"
+              icon={ListChecks}
+              basePath="/tasks"
+              extraYearsKey={EXTRA_PROJECT_YEARS_KEY}
+              loadYears={loadProjectYears}
+            />
+          )}
 
-          {NAV.slice(1).map(({ to, label, icon: Icon, end }) => (
+          {NAV.slice(1).filter(({ anyOf }) => hasAnyPermission(role, anyOf)).map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}

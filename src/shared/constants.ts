@@ -125,12 +125,14 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const PERMISSIONS = [
-  'cases.view',
-  'cases.create',
-  'cases.update',
-  'cases.delete',
-  'tasks.manage',
-  'decisions.manage',
+  'requests.view',
+  'requests.create',
+  'requests.update',
+  'requests.delete',
+  'projects.view',
+  'projects.create',
+  'projects.update',
+  'projects.delete',
   'audit.view',
   'audit.verify',
   'reports.view',
@@ -142,11 +144,15 @@ export type Permission = (typeof PERMISSIONS)[number];
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   administrator: [...PERMISSIONS],
   privacy_manager: [
-    'cases.view', 'cases.create', 'cases.update', 'cases.delete',
-    'tasks.manage', 'decisions.manage', 'audit.view', 'audit.verify',
-    'reports.view', 'settings.manage',
+    'requests.view', 'requests.create', 'requests.update', 'requests.delete',
+    'projects.view', 'projects.create', 'projects.update', 'projects.delete',
+    'audit.view', 'audit.verify', 'reports.view', 'settings.manage',
   ],
-  privacy_analyst: ['cases.view', 'cases.create', 'cases.update', 'tasks.manage', 'reports.view'],
-  reviewer: ['cases.view', 'decisions.manage', 'reports.view', 'audit.view'],
-  auditor: ['cases.view', 'audit.view', 'audit.verify', 'reports.view'],
+  privacy_analyst: [
+    'requests.view', 'requests.create', 'requests.update',
+    'projects.view', 'projects.create', 'projects.update',
+    'reports.view',
+  ],
+  reviewer: ['requests.view', 'projects.view', 'projects.update', 'reports.view', 'audit.view'],
+  auditor: ['requests.view', 'projects.view', 'audit.view', 'audit.verify', 'reports.view'],
 };

@@ -88,7 +88,7 @@ export function ProjectDetailPage() {
   }
 
   const p = project;
-  const canEdit = can(user?.role, 'cases.update');
+  const canEdit = can(user?.role, 'projects.update');
 
   function startEdit() {
     setDraft(JSON.parse(JSON.stringify(p)) as Project);

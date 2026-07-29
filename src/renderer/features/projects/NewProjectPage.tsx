@@ -6,6 +6,7 @@ import type { NewProjectInput } from '../../platform/types';
 import { PROJECT_STATUSES } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
+import { useAuth, can } from '../../store/auth';
 
 const SOURCES = ['DD', 'SSDS', 'Lighthouse'];
 const INVESTMENT_CLASSES = ['CTB', 'KTLO', 'RTB', 'Not Listed'];
@@ -13,6 +14,7 @@ const SSDS_TYPES = ['User', 'Application', 'N/A'];
 
 export function NewProjectPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [busy, setBusy] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [submitError, setSubmitError] = React.useState('');
@@ -40,6 +42,12 @@ export function NewProjectPage() {
   const [assetsMentioned, setAssetsMentioned] = React.useState('');
 
   const [comments, setComments] = React.useState('');
+
+  if (!can(user?.role, 'projects.create')) {
+    return (
+      <GlassPanel><p className="text-sm text-muted">You do not have permission to create projects.</p></GlassPanel>
+    );
+  }
 
   function validate(): boolean {
     const e: Record<string, string> = {};

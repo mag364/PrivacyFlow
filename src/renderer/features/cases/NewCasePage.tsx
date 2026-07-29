@@ -38,7 +38,7 @@ export function NewCasePage() {
     platform().system.settings().then((settings) => setRequestIdPrefix(settings.caseNumberPrefix));
   }, []);
 
-  if (!can(user?.role, 'cases.create')) {
+  if (!can(user?.role, 'requests.create')) {
     return (
       <GlassPanel><p className="text-sm text-muted">You do not have permission to create requests.</p></GlassPanel>
     );

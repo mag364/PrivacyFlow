@@ -65,7 +65,7 @@ export function DashboardPage() {
         title="Dashboard"
         subtitle="Operational overview of your data subject requests."
         actions={
-          can(user?.role, 'cases.create') && (
+          can(user?.role, 'requests.create') && (
             <>
               <GlassButton onClick={() => navigate('/projects/new')}>
                 <FolderPlus className="h-4 w-4" /> Add Project

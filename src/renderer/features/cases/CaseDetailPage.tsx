@@ -123,7 +123,7 @@ export function CaseDetailPage() {
     );
   }
 
-  const canEdit = can(user?.role, 'cases.update');
+  const canEdit = can(user?.role, 'requests.update');
 
   const requestIdValue =
     c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '—';

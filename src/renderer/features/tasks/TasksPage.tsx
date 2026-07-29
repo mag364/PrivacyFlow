@@ -218,7 +218,7 @@ export function TasksPage() {
               </GlassButton>
             )}
             <GlassButton onClick={exportXlsx}><Download className="h-4 w-4" /> Export</GlassButton>
-            {can(user?.role, 'cases.create') && (
+            {can(user?.role, 'projects.create') && (
               <GlassButton variant="primary" onClick={() => navigate('/projects/new')}>
                 <FolderPlus className="h-4 w-4" /> Add Project
               </GlassButton>

@@ -484,7 +484,11 @@ function migrateWorkflow(d: Db): boolean {
 function removeRequesterFirstNamePlaceholder(text: string): string {
   return text
     .replace(/\{\{\s*requester\.firstName\s*\}\}\s+\{\{\s*requester\.lastName\s*\}\}/g, '{{requester.lastName}}')
-    .replace(/\{\{\s*requester\.firstName\s*\}\}/g, '{{requester.lastName}}');
+    .replace(/\{\{\s*requester\.firstName\s*\}\}/g, '{{requester.lastName}}')
+    .replace(/\s*We will respond by\s+\{\{\s*case\.dueDate\s*\}\}\./gi, '')
+    .replace(/\s*\(due\s+\{\{\s*case\.dueDate\s*\}\}\)/gi, '')
+    .replace(/\s*The statutory due date is\s+\{\{\s*case\.dueDate\s*\}\}\./gi, '')
+    .replace(/\{\{\s*case\.dueDate\s*\}\}/g, '');
 }
 
 function migrateRequesterFirstNameTemplates(d: Db): boolean {

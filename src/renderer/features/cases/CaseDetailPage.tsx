@@ -633,13 +633,13 @@ export function CaseDetailPage() {
               {comms.length === 0 ? <EmptyState title="No communications" icon={<MessageSquare className="h-6 w-6" />} /> : (
                 <div className="flex flex-col gap-2">
                   {comms.map((m) => (
-                    <div key={m.id} className="rounded-xl border border-line px-4 py-3">
-                      <div className="mb-1 flex items-center gap-2">
+                    <div key={m.id} className="min-w-0 overflow-hidden rounded-xl border border-line px-4 py-3">
+                      <div className="mb-1 flex min-w-0 items-center gap-2">
                         <GlassBadge tone={m.direction === 'Inbound' ? 'info' : 'neutral'}>{m.direction}</GlassBadge>
-                        <span className="text-sm font-medium text-ink">{m.subject}</span>
-                        <span className="ml-auto text-xs text-muted">{fmtDateTime(m.sentAt)}</span>
+                        <span className="min-w-0 flex-1 break-words text-sm font-medium text-ink">{m.subject}</span>
+                        <span className="shrink-0 text-xs text-muted">{fmtDateTime(m.sentAt)}</span>
                       </div>
-                      <p className="text-sm text-muted">{m.summary}</p>
+                      <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted [overflow-wrap:anywhere]">{m.summary}</p>
                     </div>
                   ))}
                 </div>

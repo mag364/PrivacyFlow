@@ -18,7 +18,7 @@ export function CasesPage() {
 
   const [cases, setCases] = React.useState<DsrCase[] | null>(null);
   const [q, setQ] = React.useState('');
-  const [status, setStatus] = React.useState<StatusFilter>('open');
+  const [status, setStatus] = React.useState<StatusFilter>('all');
   const [type, setType] = React.useState<string>('all');
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -140,9 +140,9 @@ export function CasesPage() {
           <GlassInput className="pl-9" placeholder="Search request number, name, email…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <GlassSelect className="w-56" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="all">All statuses</option>
           <option value="open">Open requests</option>
           <option value="closed">Closed requests</option>
-          <option value="all">All statuses</option>
           {CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </GlassSelect>
         <GlassSelect className="w-44" value={type} onChange={(e) => setType(e.target.value)}>

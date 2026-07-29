@@ -1283,59 +1283,8 @@ export function SettingsPage() {
 
     const email = m365Email.trim();
     const isDesktop = !!workspaceBridge();
-    const outlook = outlookBridge();
 
     try {
-      if (isDesktop && outlook) {
-        try {
-          const accounts = await outlook.accounts();
-          const match = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase());
-          if (accounts.length && !match) {
-            throw new Error(
-              `Outlook is available, but ${email} was not found in this Windows profile. Open Outlook with that mailbox first, then try again.`,
-            );
-          }
-          const s = await platform().system.updateSettings({
-            m365: {
-              connected: true,
-              accountEmail: email,
-              connectedAt: new Date().toISOString(),
-              connectedBy: user?.name,
-              mode: 'outlook',
-              fallback: 'mailto',
-            },
-          });
-          setSettings(s);
-          setConnecting(false);
-          setM365Email('');
-          setM365TestResult(`Connected local Outlook desktop automation for ${email}.`);
-          return;
-        } catch (e) {
-          const bridge = mailBridge();
-          if (!bridge) throw e;
-          await bridge.openDraft({
-            to: email,
-            subject: `PrivacyFlow Outlook fallback test (${new Date().toLocaleString()})`,
-            body: 'PrivacyFlow could not verify local Outlook automation, so it opened this fallback draft.',
-          });
-          const s = await platform().system.updateSettings({
-            m365: {
-              connected: true,
-              accountEmail: email,
-              connectedAt: new Date().toISOString(),
-              connectedBy: user?.name,
-              mode: 'mailto',
-              fallback: 'mailto',
-            },
-          });
-          setSettings(s);
-          setConnecting(false);
-          setM365Email('');
-          setM365Error(`Local Outlook PowerShell automation could not be verified, so PrivacyFlow connected mailto fallback instead: ${e instanceof Error ? e.message : 'Outlook automation failed.'}`);
-          return;
-        }
-      }
-
       if (isDesktop) {
         const s = await platform().system.updateSettings({
           m365: {
@@ -1343,14 +1292,14 @@ export function SettingsPage() {
             accountEmail: email,
             connectedAt: new Date().toISOString(),
             connectedBy: user?.name,
-            mode: 'mailto',
+            mode: 'outlook',
             fallback: 'mailto',
           },
         });
         setSettings(s);
         setConnecting(false);
         setM365Email('');
-        setM365TestResult('Connected mailto draft fallback because the local Outlook bridge was unavailable.');
+        setM365TestResult(`Connected local Outlook desktop automation for ${email}. Use Test connection to confirm PowerShell can open a draft.`);
         return;
       }
 
@@ -1367,6 +1316,8 @@ export function SettingsPage() {
       setConnecting(false);
       setM365Email('');
       setM365TestResult('Browser preview is in simulated mode.');
+    } catch (e) {
+      setM365Error(e instanceof Error ? e.message : 'Unable to connect Microsoft 365.');
     } finally {
       setM365ConnectBusy(false);
     }
@@ -1658,7 +1609,7 @@ export function SettingsPage() {
                   <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
                     <p className="text-[11px] text-muted">
-                      In the packaged Windows app, Connect uses local Outlook desktop automation through PowerShell to open drafts from the mailbox configured in this Windows profile. If that automation is unavailable, PrivacyFlow falls back to opening mailto drafts.
+                      In the packaged Windows app, Connect saves this mailbox for local Outlook desktop automation. Use Test connection after connecting to confirm PowerShell can open Outlook drafts. If automation is unavailable, PrivacyFlow falls back to mailto drafts.
                     </p>
                   </div>
                   <div className="flex justify-end gap-2">

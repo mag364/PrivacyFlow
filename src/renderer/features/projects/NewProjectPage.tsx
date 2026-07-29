@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { platform } from '../../platform';
 import type { NewProjectInput } from '../../platform/types';
+import type { Project } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
@@ -18,6 +19,8 @@ export function NewProjectPage() {
   const [busy, setBusy] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [submitError, setSubmitError] = React.useState('');
+  const [existingProjects, setExistingProjects] = React.useState<Project[]>([]);
+  const appliedProjectNumber = React.useRef('');
 
   // Project Information
   const [projectNumber, setProjectNumber] = React.useState('');
@@ -42,6 +45,38 @@ export function NewProjectPage() {
   const [assetsMentioned, setAssetsMentioned] = React.useState('');
 
   const [comments, setComments] = React.useState('');
+
+  React.useEffect(() => {
+    platform().projects.list().then(setExistingProjects).catch(() => setExistingProjects([]));
+  }, []);
+
+  const matchedProject = React.useMemo(() => {
+    const trimmed = projectNumber.trim().toLowerCase();
+    if (!trimmed) return null;
+    return existingProjects
+      .filter((project) => project.projectNumber.trim().toLowerCase() === trimmed)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  }, [existingProjects, projectNumber]);
+
+  React.useEffect(() => {
+    if (!matchedProject) {
+      appliedProjectNumber.current = '';
+      return;
+    }
+    const normalizedNumber = matchedProject.projectNumber.trim().toLowerCase();
+    if (appliedProjectNumber.current === normalizedNumber) return;
+    appliedProjectNumber.current = normalizedNumber;
+
+    setFiscalYear(matchedProject.fiscalYear ?? '');
+    setPiaNumber(matchedProject.piaNumber ?? '');
+    setSsdsTask(matchedProject.ssdsTask ?? '');
+    setSsdsType(matchedProject.ssdsType ?? 'User');
+    setProjectUid(matchedProject.projectUid ?? '');
+    setBusinessUnit(matchedProject.businessUnit ?? '');
+    setBusinessSponsors(matchedProject.businessSponsors ?? '');
+    setDemandNumber(matchedProject.demandNumber ?? '');
+    setAssetsMentioned(matchedProject.assetsMentioned ?? '');
+  }, [matchedProject]);
 
   if (!can(user?.role, 'projects.create')) {
     return (
@@ -164,7 +199,14 @@ export function NewProjectPage() {
         </GlassPanel>
 
         <GlassPanel>
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">Project Details</h3>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Project Details</h3>
+            {matchedProject && (
+              <span className="rounded-capsule border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-200">
+                Matched {matchedProject.projectNumber}; details populated
+              </span>
+            )}
+          </div>
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Fiscal Year">

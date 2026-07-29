@@ -13,7 +13,7 @@ import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared
 import type {
   PrivacyFlowAPI, DashboardMetrics, NewCaseInput, NewProjectInput, CompleteSetupInput,
   LoginResult, NameValue, CreateUserInput, CreateUserResult, UpdateUserInput,
-  AddDocumentInput, AddCommunicationInput, ImportSummary, RetentionCleanupSummary,
+  AddDocumentInput, AddCommunicationInput, ImportSummary, RetentionCleanupSummary, RetentionCleanupOptions,
 } from './types';
 import {
   type Db, appendAudit, createSeed, nextActionFor, nextCaseNumber, nextProjectNumber,
@@ -117,6 +117,7 @@ function defaultSettings(): OrgSettings {
     defaultJurisdiction: APP_CONFIG.defaults.defaultJurisdiction,
     autoLockMinutes: APP_CONFIG.defaults.autoLockMinutes,
     retentionYears: APP_CONFIG.defaults.retentionYears,
+    autoRetentionCleanup: APP_CONFIG.defaults.autoRetentionCleanup,
     theme: 'dark',
     setupComplete: false,
     demoDataInstalled: false,
@@ -565,6 +566,7 @@ function load(): Db | null {
     const s = cache.settings as OrgSettings;
     if (!Array.isArray(s.slaRules) || !s.slaRules.length) s.slaRules = d.slaRules;
     if (typeof s.retentionYears !== 'number' || s.retentionYears < 1) s.retentionYears = d.retentionYears;
+    if (typeof s.autoRetentionCleanup !== 'boolean') s.autoRetentionCleanup = d.autoRetentionCleanup;
     if (!Array.isArray(s.reminderCadenceDays)) s.reminderCadenceDays = d.reminderCadenceDays;
     if (typeof s.dueSoonThresholdDays !== 'number') s.dueSoonThresholdDays = d.dueSoonThresholdDays;
     if (typeof s.autoPauseSla !== 'boolean') s.autoPauseSla = d.autoPauseSla;
@@ -815,6 +817,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           defaultJurisdiction: input.defaultJurisdiction ?? APP_CONFIG.defaults.defaultJurisdiction,
           autoLockMinutes: input.autoLockMinutes ?? APP_CONFIG.defaults.autoLockMinutes,
           retentionYears: APP_CONFIG.defaults.retentionYears,
+          autoRetentionCleanup: APP_CONFIG.defaults.autoRetentionCleanup,
           theme: input.theme ?? 'dark',
           demoDataInstalled: input.demoDataInstalled ?? false,
           setupComplete: true,
@@ -840,7 +843,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         save(d);
         return clone(d.settings);
       },
-      async applyRetentionCleanup(): Promise<RetentionCleanupSummary> {
+      async applyRetentionCleanup(options: RetentionCleanupOptions = {}): Promise<RetentionCleanupSummary> {
         assertWritable();
         const d = db();
         const actor = actorOf(d);
@@ -867,6 +870,8 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
 
         const casesDeleted = caseIds.size;
         const projectsDeleted = projectIds.size;
+        const summary: RetentionCleanupSummary = { cutoffDate, casesDeleted, projectsDeleted };
+        if (!casesDeleted && !projectsDeleted && options.auditWhenEmpty === false) return summary;
         if (casesDeleted || projectsDeleted) {
           d.cases = d.cases.filter((c) => !caseIds.has(c.id));
           d.tasks = d.tasks.filter((t) => !caseIds.has(t.caseId));
@@ -881,14 +886,14 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
 
         await appendAudit(d, actor, {
           category: 'System',
-          action: 'retention.cleanup',
+          action: options.automatic ? 'retention.cleanup_auto' : 'retention.cleanup',
           entityType: 'settings',
           entityId: 'workspace',
-          summary: `Retention cleanup removed ${casesDeleted} request${casesDeleted === 1 ? '' : 's'} and ${projectsDeleted} project${projectsDeleted === 1 ? '' : 's'}`,
-          newValue: { retentionYears, cutoffDate, casesDeleted, projectsDeleted },
+          summary: `${options.automatic ? 'Automatic retention cleanup' : 'Retention cleanup'} removed ${casesDeleted} request${casesDeleted === 1 ? '' : 's'} and ${projectsDeleted} project${projectsDeleted === 1 ? '' : 's'}`,
+          newValue: { retentionYears, cutoffDate, casesDeleted, projectsDeleted, automatic: !!options.automatic },
         });
         save(d);
-        return { cutoffDate, casesDeleted, projectsDeleted };
+        return summary;
       },
       async resetApplication() {
         assertWritable();

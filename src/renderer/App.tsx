@@ -149,6 +149,11 @@ export function App() {
       await refreshLockState();
       const settings = await platform().system.settings();
       setNeedsSetup(!settings.setupComplete);
+      if (settings.setupComplete && settings.autoRetentionCleanup) {
+        await platform().system.applyRetentionCleanup({ automatic: true, auditWhenEmpty: false }).catch(() => {
+          // Startup should not fail because this instance is read-only or cleanup is unavailable.
+        });
+      }
       await init();
       setBooted(true);
       fetchLatestPublishedRelease().then(setAvailableRelease).catch(() => {

@@ -1358,6 +1358,21 @@ export function SettingsPage() {
                   </p>
                 </div>
               </div>
+              <label className="mt-3 flex items-start gap-3 rounded-xl border border-line bg-[var(--pf-highlight)] px-3 py-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 focus-ring"
+                  checked={settings.autoRetentionCleanup}
+                  disabled={!editable}
+                  onChange={(e) => setSettings({ ...settings, autoRetentionCleanup: e.target.checked })}
+                />
+                <span>
+                  <span className="block font-medium">Automatically apply retention cleanup on startup</span>
+                  <span className="block text-[11px] text-muted">
+                    When enabled, PrivacyFlow checks on startup and deletes records older than the retention period. No audit row is created when nothing is deleted.
+                  </span>
+                </span>
+              </label>
               {editable && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <GlassButton variant="danger" loading={retentionBusy} onClick={applyRetentionCleanup}>

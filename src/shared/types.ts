@@ -317,6 +317,7 @@ export interface OrgSettings {
   defaultJurisdiction: string;
   autoLockMinutes: number;
   retentionYears: number;
+  autoRetentionCleanup: boolean;
   theme: string;
   setupComplete: boolean;
   demoDataInstalled: boolean;

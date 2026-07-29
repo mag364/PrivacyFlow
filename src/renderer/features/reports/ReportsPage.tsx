@@ -239,7 +239,15 @@ export function ReportsPage() {
           <h3 className="mb-3 text-sm font-semibold text-ink">Projects by investment class</h3>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={projectsByClass} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+              <Pie
+                data={projectsByClass}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={100}
+                label={{ fill: 'var(--pf-text)', stroke: 'var(--pf-bg)', strokeWidth: 3, paintOrder: 'stroke', fontSize: 12 }}
+              >
                 {projectsByClass.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
               </Pie>
               <Tooltip contentStyle={tooltipStyle} />

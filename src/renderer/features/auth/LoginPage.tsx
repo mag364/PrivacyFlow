@@ -1,11 +1,41 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, KeyRound, Info } from 'lucide-react';
+import { AlertCircle, KeyRound, Info, PackageCheck, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../store/auth';
 import { APP_CONFIG } from '@shared/config';
 import { PASSWORD_MIN_LENGTH } from '@shared/password';
 import { GlassButton, GlassInput, GlassPanel, Field } from '../../components/glass';
 import privacyFlowIcon from '../../assets/privacyflow-icon.png';
+
+interface GitHubRelease {
+  tag_name: string;
+  html_url: string;
+  draft?: boolean;
+}
+
+function normalizeVersion(value: string): number[] {
+  return value
+    .trim()
+    .replace(/^v/i, '')
+    .split(/[.-]/)
+    .slice(0, 3)
+    .map((part) => {
+      const parsed = Number.parseInt(part.replace(/\D+.*/, ''), 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    });
+}
+
+function isNewerVersion(candidate: string, current: string): boolean {
+  const next = normalizeVersion(candidate);
+  const base = normalizeVersion(current);
+  for (let i = 0; i < Math.max(next.length, base.length); i += 1) {
+    const a = next[i] ?? 0;
+    const b = base[i] ?? 0;
+    if (a > b) return true;
+    if (a < b) return false;
+  }
+  return false;
+}
 
 export function LoginPage() {
   const {
@@ -15,6 +45,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = React.useState('admin');
   const [password, setPassword] = React.useState('');
+  const [availableRelease, setAvailableRelease] = React.useState<GitHubRelease | null>(null);
 
   // First-login password change form
   const [currentPw, setCurrentPw] = React.useState('');
@@ -25,6 +56,32 @@ export function LoginPage() {
   React.useEffect(() => {
     if (user) navigate('/', { replace: true });
   }, [user, navigate]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(APP_CONFIG.updates.latestReleaseUrl, {
+          headers: { Accept: 'application/vnd.github+json' },
+        });
+        if (!res.ok) return;
+        const latest = await res.json() as GitHubRelease;
+        if (
+          !cancelled &&
+          latest.tag_name &&
+          !latest.draft &&
+          isNewerVersion(latest.tag_name, APP_CONFIG.version)
+        ) {
+          setAvailableRelease(latest);
+        }
+      } catch {
+        // Sign-in must keep working if GitHub is unavailable.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,43 +174,64 @@ export function LoginPage() {
           <p className="text-[11px] text-muted">{APP_CONFIG.disclaimer}</p>
         </div>
 
-        <GlassPanel className="p-8">
-          <h1 className="text-xl font-bold text-ink">Sign in</h1>
-          <p className="mt-1 text-sm text-muted">
-            Sign in with the workspace administrator account, or an account created under
-            Settings → Users.
-          </p>
+        <div className="flex flex-col gap-3">
+          {availableRelease && (
+            <button
+              type="button"
+              onClick={() => window.open(availableRelease.html_url, '_blank', 'noopener,noreferrer')}
+              className="flex items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-left transition-colors hover:bg-amber-400/15 focus-ring"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <PackageCheck className="h-4 w-4 shrink-0 text-amber-300" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-amber-100">Update available</span>
+                  <span className="block text-xs text-amber-100/80">
+                    {availableRelease.tag_name} is available. Current version {APP_CONFIG.version}.
+                  </span>
+                </span>
+              </span>
+              <ExternalLink className="h-4 w-4 shrink-0 text-amber-200" />
+            </button>
+          )}
 
-          <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
-            <Field label="Username">
-              <GlassInput value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
-            </Field>
-            <Field label="Password">
-              <GlassInput type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </Field>
+          <GlassPanel className="p-8">
+            <h1 className="text-xl font-bold text-ink">Sign in</h1>
+            <p className="mt-1 text-sm text-muted">
+              Sign in with the workspace administrator account, or an account created under
+              Settings → Users.
+            </p>
 
-            {error && (
-              <div className="flex items-center gap-2 rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-300">
-                <AlertCircle className="h-4 w-4" /> {error}
+            <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
+              <Field label="Username">
+                <GlassInput value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+              </Field>
+              <Field label="Password">
+                <GlassInput type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
+
+              {error && (
+                <div className="flex items-center gap-2 rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-300">
+                  <AlertCircle className="h-4 w-4" /> {error}
+                </div>
+              )}
+
+              <GlassButton type="submit" variant="primary" loading={loading} className="w-full">
+                Sign in
+              </GlassButton>
+            </form>
+
+            <div className="mt-6 border-t border-line pt-4">
+              <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+                <p className="text-[11px] text-muted">
+                  The initial administrator account is <span className="font-medium text-ink">admin</span>.
+                  Accounts created by an administrator sign in with their generated temporary password
+                  and set their own password on first sign-in.
+                </p>
               </div>
-            )}
-
-            <GlassButton type="submit" variant="primary" loading={loading} className="w-full">
-              Sign in
-            </GlassButton>
-          </form>
-
-          <div className="mt-6 border-t border-line pt-4">
-            <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-              <p className="text-[11px] text-muted">
-                The initial administrator account is <span className="font-medium text-ink">admin</span>.
-                Accounts created by an administrator sign in with their generated temporary password
-                and set their own password on first sign-in.
-              </p>
             </div>
-          </div>
-        </GlassPanel>
+          </GlassPanel>
+        </div>
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ export type WorkspaceLockState =
 export interface WorkspaceInfo {
   dbPath: string;
   lockState: WorkspaceLockState;
+  persisted?: boolean;
 }
 
 export interface ChoosePathResult {

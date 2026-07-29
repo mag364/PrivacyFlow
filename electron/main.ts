@@ -46,9 +46,31 @@ function uniqueDownloadPath(fileName: string): string {
   return candidate;
 }
 
+function workspacePreferencePath(): string {
+  return path.join(app.getPath('userData'), 'workspace-path.json');
+}
+
+function readWorkspacePreference(): string | null {
+  try {
+    const raw = fs.readFileSync(workspacePreferencePath(), 'utf8');
+    const parsed = JSON.parse(raw) as { dbPath?: string };
+    const saved = String(parsed.dbPath || '').trim();
+    return saved || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkspacePreference(nextDbPath: string): void {
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(workspacePreferencePath(), JSON.stringify({ dbPath: nextDbPath }, null, 2), 'utf8');
+}
+
 function resolveDbPath(): string {
   const shared = process.env.PRIVACYFLOW_WORKSPACE;
   if (shared) return shared;
+  const saved = readWorkspacePreference();
+  if (saved) return saved;
   return path.join(app.getPath('userData'), 'privacyflow.db.json');
 }
 
@@ -250,7 +272,11 @@ ipcMain.handle('workspace:claimStale', async () => {
   return lockState;
 });
 
-ipcMain.handle('workspace:info', async () => ({ dbPath, lockState }));
+ipcMain.handle('workspace:info', async () => ({
+  dbPath,
+  lockState,
+  persisted: readWorkspacePreference() === dbPath || !!process.env.PRIVACYFLOW_WORKSPACE,
+}));
 
 // Let the user repoint the workspace at a different (e.g. shared) folder from
 // Settings. Releases the current lock, switches path, and re-acquires. The
@@ -269,6 +295,7 @@ ipcMain.handle('workspace:choosePath', async () => {
 
   lock.release();
   dbPath = nextPath;
+  writeWorkspacePreference(dbPath);
   lock = new WorkspaceLock(dbPath, os.userInfo().username);
   lockState = lock.acquire();
   try {

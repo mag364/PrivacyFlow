@@ -1,9 +1,9 @@
 import React from 'react';
 import {
-  Mail, Zap, Save, Check, Plus, Trash2, Pencil,
+  Mail, Zap, Save, Check, Plus, Trash2, Pencil, Users,
 } from 'lucide-react';
 import { platform } from '../../platform';
-import type { OrgSettings, EmailTemplate, AutomationRule } from '@shared/types';
+import type { OrgSettings, EmailTemplate, AutomationRule, AutomationRecipient } from '@shared/types';
 import { CASE_STATUSES } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import {
@@ -20,12 +20,13 @@ const PLACEHOLDERS = [
   '{{case.receivedDate}}', '{{org.name}}', '{{rule.department}}',
 ];
 
-const DEPARTMENTS = ['Customer Support', 'Marketing', 'Sales', 'People', 'Finance', 'Legal', 'IT', 'Engineering'];
+type Tab = 'emails' | 'recipients';
 
 export function AutomationPage() {
   const { user } = useAuth();
   const [settings, setSettings] = React.useState<OrgSettings | null>(null);
   const [saved, setSaved] = React.useState(false);
+  const [tab, setTab] = React.useState<Tab>('emails');
   const [editingTemplate, setEditingTemplate] = React.useState<EmailTemplate | null>(null);
 
   React.useEffect(() => {
@@ -73,10 +74,32 @@ export function AutomationPage() {
     patch({ automationRules: settings!.automationRules.filter((r) => r.id !== id) });
   }
 
+  function updateRecipient(id: string, p: Partial<AutomationRecipient>) {
+    patch({
+      automationRecipients: settings!.automationRecipients.map((recipient) =>
+        recipient.id === id ? { ...recipient, ...p } : recipient,
+      ),
+    });
+  }
+
+  function addRecipient() {
+    patch({
+      automationRecipients: [
+        ...settings!.automationRecipients,
+        { id: uid(), name: 'New recipient', email: '', enabled: true },
+      ],
+    });
+  }
+
+  function deleteRecipient(id: string) {
+    patch({ automationRecipients: settings!.automationRecipients.filter((recipient) => recipient.id !== id) });
+  }
+
   async function save() {
     const s = await platform().system.updateSettings({
       emailTemplates: settings!.emailTemplates,
       automationRules: settings!.automationRules,
+      automationRecipients: settings!.automationRecipients,
     });
     setSettings(s);
     setSaved(true);
@@ -84,6 +107,7 @@ export function AutomationPage() {
   }
 
   const templateName = (id: string) => settings.emailTemplates.find((t) => t.id === id)?.name ?? '-';
+  const recipientNames = settings.automationRecipients.map((recipient) => recipient.name).filter(Boolean);
 
   return (
     <div>
@@ -106,8 +130,26 @@ export function AutomationPage() {
         </GlassPanel>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <GlassPanel>
+      <div className="mb-4 flex gap-1 border-b border-line pb-2">
+        {([
+          ['emails', 'Email automation', Mail],
+          ['recipients', 'Recipients', Users],
+        ] as const).map(([key, label, Icon]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex items-center gap-1.5 rounded-capsule px-3 py-1.5 text-sm font-medium transition-all focus-ring ${
+              tab === key ? 'bg-accent/15 text-ink' : 'text-muted hover:text-ink'
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'emails' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <GlassPanel>
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-accent" />
@@ -180,10 +222,10 @@ export function AutomationPage() {
                 {editingTemplate.audience === 'department' && (
                   <Field label="Department">
                     <GlassSelect
-                      value={editingTemplate.department ?? DEPARTMENTS[0]}
+                      value={editingTemplate.department ?? recipientNames[0] ?? 'Ron K.'}
                       onChange={(e) => setEditingTemplate({ ...editingTemplate, department: e.target.value })}
                     >
-                      {DEPARTMENTS.map((d) => <option key={d}>{d}</option>)}
+                      {recipientNames.map((d) => <option key={d}>{d}</option>)}
                     </GlassSelect>
                   </Field>
                 )}
@@ -214,9 +256,9 @@ export function AutomationPage() {
               </div>
             </div>
           )}
-        </GlassPanel>
+          </GlassPanel>
 
-        <GlassPanel>
+          <GlassPanel>
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-accent" />
@@ -278,8 +320,84 @@ export function AutomationPage() {
               <p className="py-6 text-center text-sm text-muted">No rules yet. Rules send templates automatically when their trigger fires.</p>
             )}
           </div>
+          </GlassPanel>
+        </div>
+      )}
+
+      {tab === 'recipients' && (
+        <GlassPanel>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-accent" />
+              <h3 className="text-sm font-semibold text-ink">Recipients</h3>
+            </div>
+            {editable && (
+              <GlassButton variant="ghost" className="px-2 py-1 text-xs" onClick={addRecipient}>
+                <Plus className="h-3.5 w-3.5" /> New recipient
+              </GlassButton>
+            )}
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Department templates use these email addresses when PrivacyFlow opens Outlook drafts.
+          </p>
+
+          <div className="content-surface overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--pf-surface-2)]">
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                  <th className="px-4 py-3">Enabled</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Email address</th>
+                  {editable && <th className="px-4 py-3">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {settings.automationRecipients.map((recipient) => (
+                  <tr key={recipient.id} className="border-b border-line/60">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 focus-ring"
+                        checked={recipient.enabled}
+                        disabled={!editable}
+                        onChange={(e) => updateRecipient(recipient.id, { enabled: e.target.checked })}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <GlassInput
+                        disabled={!editable}
+                        value={recipient.name}
+                        onChange={(e) => updateRecipient(recipient.id, { name: e.target.value })}
+                        placeholder="e.g. Ron K."
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <GlassInput
+                        disabled={!editable}
+                        type="email"
+                        value={recipient.email}
+                        onChange={(e) => updateRecipient(recipient.id, { email: e.target.value })}
+                        placeholder="name@example.com"
+                      />
+                    </td>
+                    {editable && (
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => deleteRecipient(recipient.id)}
+                          className="rounded-lg p-1.5 text-muted hover:text-red-400 focus-ring"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </GlassPanel>
-      </div>
+      )}
 
       <GlassPanel className="mt-4">
         <p className="text-xs text-muted">

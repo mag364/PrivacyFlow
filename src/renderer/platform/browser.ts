@@ -1,7 +1,7 @@
 import { addDays, isSameMonth, parseISO } from 'date-fns';
 import type {
   DsrCase, AuditEvent, IntegrityReport, OrgSettings, CaseNote, SlaInfo, Project, SlaRule,
-  EmailTemplate, AutomationRule, AutomationTrigger, User, CaseDocument, Communication,
+  EmailTemplate, AutomationRule, AutomationTrigger, AutomationRecipient, User, CaseDocument, Communication,
 } from '@shared/types';
 import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
@@ -74,7 +74,7 @@ function defaultEmailTemplates(): EmailTemplate[] {
       subject: 'Data search required — {{case.number}}',
       body: 'Hello {{rule.department}} team,\n\nPlease search your systems for personal data relating to {{requester.lastName}} ({{requester.email}}) in support of privacy request {{case.number}} ({{case.types}}).\n\nThank you,\n{{org.name}} Privacy Office',
       audience: 'department',
-      department: 'Customer Support',
+      department: 'Ron K.',
     },
     {
       id: 'tpl-fulfilled',
@@ -83,6 +83,20 @@ function defaultEmailTemplates(): EmailTemplate[] {
       body: 'Dear {{requester.lastName}},\n\nYour {{case.types}} request ({{case.number}}) has been completed and closed. A summary of the actions taken is attached.\n\nKind regards,\n{{org.name}} Privacy Office',
       audience: 'requester',
     },
+  ];
+}
+
+function defaultAutomationRecipients(): AutomationRecipient[] {
+  return [
+    { id: 'recipient-ron-k', name: 'Ron K.', email: '', enabled: true },
+    { id: 'recipient-customer-support', name: 'Customer Support', email: '', enabled: true },
+    { id: 'recipient-marketing', name: 'Marketing', email: '', enabled: true },
+    { id: 'recipient-sales', name: 'Sales', email: '', enabled: true },
+    { id: 'recipient-people', name: 'People', email: '', enabled: true },
+    { id: 'recipient-finance', name: 'Finance', email: '', enabled: true },
+    { id: 'recipient-legal', name: 'Legal', email: '', enabled: true },
+    { id: 'recipient-it', name: 'IT', email: '', enabled: true },
+    { id: 'recipient-engineering', name: 'Engineering', email: '', enabled: true },
   ];
 }
 
@@ -111,6 +125,7 @@ function defaultSettings(): OrgSettings {
     escalationAlerts: true,
     emailTemplates: defaultEmailTemplates(),
     automationRules: defaultAutomationRules(),
+    automationRecipients: defaultAutomationRecipients(),
     m365: { connected: false, mode: 'simulated' },
   };
 }
@@ -261,6 +276,14 @@ function renderTemplate(text: string, c: DsrCase, orgName: string, department?: 
   return text.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (m, key) => map[key] ?? m);
 }
 
+function resolveAutomationRecipient(settings: OrgSettings, name?: string): { label: string; email: string } {
+  const label = name?.trim() || 'Department';
+  const match = (settings.automationRecipients ?? []).find(
+    (recipient) => recipient.enabled && recipient.name.trim().toLowerCase() === label.toLowerCase(),
+  );
+  return { label, email: match?.email.trim() ?? '' };
+}
+
 async function runAutomations(
   d: Db,
   c: DsrCase,
@@ -287,9 +310,11 @@ async function runAutomations(
     if (!tpl) continue;
 
     const isDept = tpl.audience === 'department';
+    const resolved = isDept ? resolveAutomationRecipient(d.settings, tpl.department) : null;
     const recipient = isDept
-      ? `${tpl.department ?? 'Department'} team`
+      ? (resolved?.email || `${resolved?.label ?? 'Department'} team`)
       : (c.subject.emails[0] ?? 'requester');
+    const recipientLabel = isDept && resolved?.email ? `${resolved.label} <${resolved.email}>` : recipient;
     const subject = renderTemplate(tpl.subject, c, d.settings.organizationName, tpl.department);
     const body = renderTemplate(tpl.body, c, d.settings.organizationName, tpl.department);
     const now = new Date().toISOString();
@@ -305,7 +330,7 @@ async function runAutomations(
         deliveryNote = '\n\nOpened with the default mail app because local Outlook automation was unavailable.';
       }
     } else if (m365?.mode === 'outlook') {
-      deliveryNote = '\n\nOutlook draft was not opened because this automation target does not have an email address.';
+      deliveryNote = `\n\nOutlook draft was not opened because ${recipient} does not have a configured email address. Add it in Automation > Recipients.`;
     }
 
     d.communications.push({
@@ -314,7 +339,7 @@ async function runAutomations(
       direction: 'Outbound',
       channel: viaM365 ? 'Email (Microsoft 365)' : 'Email',
       subject,
-      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipient}${deliveryNote}\n\n${body}`,
+      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipientLabel}${deliveryNote}\n\n${body}`,
       sentAt: now,
       status: sendStatus,
       createdBy: 'automation',
@@ -327,8 +352,8 @@ async function runAutomations(
       entityType: 'communication',
       entityId: c.id,
       caseId: c.id,
-      summary: `Automated email "${tpl.name}" sent to ${recipient} (${rule.name})${sender ? ` via ${sender}` : ''}`,
-      newValue: { rule: rule.name, template: tpl.name, recipient, subject, via: sender ?? 'local log' },
+      summary: `Automated email "${tpl.name}" sent to ${recipientLabel} (${rule.name})${sender ? ` via ${sender}` : ''}`,
+      newValue: { rule: rule.name, template: tpl.name, recipient: recipientLabel, subject, via: sender ?? 'local log' },
     });
   }
 }
@@ -465,6 +490,7 @@ function load(): Db | null {
     if (typeof s.escalationAlerts !== 'boolean') s.escalationAlerts = d.escalationAlerts;
     if (!Array.isArray(s.emailTemplates)) s.emailTemplates = d.emailTemplates;
     if (!Array.isArray(s.automationRules)) s.automationRules = d.automationRules;
+    if (!Array.isArray(s.automationRecipients)) s.automationRecipients = d.automationRecipients;
     if (!s.m365 || typeof s.m365.connected !== 'boolean') s.m365 = d.m365;
     const workflowMigrated = migrateWorkflow(cache);
     const templateMigrated = migrateRequesterFirstNameTemplates(cache);

@@ -263,6 +263,13 @@ export interface EmailTemplate {
   department?: string;
 }
 
+export interface AutomationRecipient {
+  id: string;
+  name: string;
+  email: string;
+  enabled: boolean;
+}
+
 export type AutomationTrigger = 'case.created' | 'status.changed';
 
 export interface AutomationRule {
@@ -306,6 +313,7 @@ export interface OrgSettings {
   // ---- Email automation ----
   emailTemplates: EmailTemplate[];
   automationRules: AutomationRule[];
+  automationRecipients: AutomationRecipient[];
   // ---- Integrations ----
   m365: M365Integration;
 }

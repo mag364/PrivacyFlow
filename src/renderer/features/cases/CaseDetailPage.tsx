@@ -34,7 +34,7 @@ const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?
 
 const DOC_CATEGORIES = ['General', 'Evidence'];
 const NOTE_CATEGORIES = ['General'];
-const AUDIT_PAGE_SIZES = [10, 25, 50, 100] as const;
+const AUDIT_PAGE_SIZE = 10;
 
 interface EditDraft {
   // Request
@@ -72,7 +72,6 @@ export function CaseDetailPage() {
   const [docs, setDocs] = React.useState<CaseDocument[]>([]);
   const [audit, setAudit] = React.useState<AuditEvent[]>([]);
   const [auditPage, setAuditPage] = React.useState(0);
-  const [auditPageSize, setAuditPageSize] = React.useState<(typeof AUDIT_PAGE_SIZES)[number]>(10);
   const [noteText, setNoteText] = React.useState('');
   const [noteCat, setNoteCat] = React.useState('General');
   const [statusReason, setStatusReason] = React.useState('');
@@ -120,14 +119,14 @@ export function CaseDetailPage() {
 
   React.useEffect(() => { load(); }, [load]);
   React.useEffect(() => { setCommPage(0); }, [id]);
-  React.useEffect(() => { setAuditPage(0); }, [id, auditPageSize]);
+  React.useEffect(() => { setAuditPage(0); }, [id]);
   React.useEffect(() => {
     setCommPage((page) => Math.min(page, Math.max(comms.length - 1, 0)));
   }, [comms.length]);
   React.useEffect(() => {
-    const pageCount = Math.max(Math.ceil(audit.length / auditPageSize), 1);
+    const pageCount = Math.max(Math.ceil(audit.length / AUDIT_PAGE_SIZE), 1);
     setAuditPage((page) => Math.min(page, pageCount - 1));
-  }, [audit.length, auditPageSize]);
+  }, [audit.length]);
 
   if (c === undefined) return <Spinner label="Loading request…" />;
   if (c === null) {
@@ -144,9 +143,9 @@ export function CaseDetailPage() {
   const canEdit = can(user?.role, 'requests.update');
   const activeComm = comms[commPage] ?? null;
   const auditRows = [...audit].reverse();
-  const auditPageCount = Math.max(Math.ceil(auditRows.length / auditPageSize), 1);
-  const auditStart = auditPage * auditPageSize;
-  const visibleAuditRows = auditRows.slice(auditStart, auditStart + auditPageSize);
+  const auditPageCount = Math.max(Math.ceil(auditRows.length / AUDIT_PAGE_SIZE), 1);
+  const auditStart = auditPage * AUDIT_PAGE_SIZE;
+  const visibleAuditRows = auditRows.slice(auditStart, auditStart + AUDIT_PAGE_SIZE);
 
   const requestIdValue =
     c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '—';
@@ -763,13 +762,6 @@ export function CaseDetailPage() {
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center justify-end gap-3 rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <GlassSelect
-                        className="w-36"
-                        value={String(auditPageSize)}
-                        onChange={(e) => setAuditPageSize(Number(e.target.value) as typeof auditPageSize)}
-                      >
-                        {AUDIT_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} per page</option>)}
-                      </GlassSelect>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"

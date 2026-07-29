@@ -19,6 +19,17 @@ function tally(values: string[]): { name: string; value: number }[] {
   return Array.from(m, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
+function monthBucket(value: string): { key: string; name: string } {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { key: '9999-99', name: 'Unknown' };
+  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  return { key, name: date.toLocaleString(undefined, { month: 'short', year: 'numeric' }) };
+}
+
+function requestReceivedDate(c: DsrCase): string {
+  return c.intakeDates?.dateDppReceivedEmail ?? c.sla.receivedDate;
+}
+
 // Group key for parent/child grouping: same project name (case-insensitive,
 // whitespace-normalized) collapses into one Excel outline group.
 function groupKey(p: Project): string {
@@ -49,6 +60,16 @@ export function ReportsPage() {
 
   const projectsBySource = tally(projects.map((p) => p.source));
   const projectsByClass = tally(projects.map((p) => p.investmentClass || 'Not Listed'));
+  const requestsByChannel = tally(cases.map((c) => String(c.intakeChannel || 'Unknown')));
+  const requestMonthlyVolume = Array.from(
+    cases.reduce((map, c) => {
+      const bucket = monthBucket(requestReceivedDate(c));
+      const current = map.get(bucket.key) ?? { key: bucket.key, name: bucket.name, value: 0 };
+      map.set(bucket.key, { ...current, value: current.value + 1 });
+      return map;
+    }, new Map<string, { key: string; name: string; value: number }>()),
+    ([, value]) => value,
+  ).sort((a, b) => a.key.localeCompare(b.key));
   const cancelledProjects = projects.filter((p) => p.notificationCancelled).length;
 
   const requestKpis = [
@@ -198,13 +219,41 @@ export function ReportsPage() {
         <GlassBadge tone="info">{cases.length} total</GlassBadge>
       </div>
 
-      <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
         {requestKpis.map(([k, v]) => (
           <GlassCard key={k}>
             <p className="text-2xl font-bold text-ink">{v}</p>
             <p className="text-xs text-muted">{k}</p>
           </GlassCard>
         ))}
+      </div>
+
+      <div className="mb-8 grid gap-4 lg:grid-cols-2">
+        <GlassCard>
+          <h3 className="mb-3 text-sm font-semibold text-ink">Monthly request volume</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={requestMonthlyVolume}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--pf-border)" />
+              <XAxis dataKey="name" stroke="var(--pf-text-muted)" fontSize={11} />
+              <YAxis allowDecimals={false} stroke="var(--pf-text-muted)" fontSize={11} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipTextStyle} itemStyle={tooltipTextStyle} />
+              <Bar dataKey="value" fill="#6ea8ff" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </GlassCard>
+
+        <GlassCard>
+          <h3 className="mb-3 text-sm font-semibold text-ink">Requests by source/channel</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={requestsByChannel}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--pf-border)" />
+              <XAxis dataKey="name" stroke="var(--pf-text-muted)" fontSize={11} />
+              <YAxis allowDecimals={false} stroke="var(--pf-text-muted)" fontSize={11} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipTextStyle} itemStyle={tooltipTextStyle} />
+              <Bar dataKey="value" fill="#54d6a1" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </GlassCard>
       </div>
 
       {/* ------------------------------ Projects ------------------------------ */}

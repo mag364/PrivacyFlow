@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Mail, Zap, Save, Check, Plus, Trash2, Pencil, Users,
+  Mail, Zap, Save, Check, Plus, Trash2, Pencil, Users, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type { OrgSettings, EmailTemplate, AutomationRule, AutomationRecipient } from '@shared/types';
@@ -47,6 +47,7 @@ export function AutomationPage() {
   const [saved, setSaved] = React.useState(false);
   const [tab, setTab] = React.useState<Tab>('emails');
   const [editingTemplate, setEditingTemplate] = React.useState<EmailTemplate | null>(null);
+  const [expandedRules, setExpandedRules] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     platform().system.settings().then(setSettings);
@@ -81,16 +82,23 @@ export function AutomationPage() {
   function addAutomationRule() {
     const tpl = settings!.emailTemplates[0];
     if (!tpl) return;
+    const id = uid();
     patch({
       automationRules: [
         ...settings!.automationRules,
-        { id: uid(), name: 'New rule', trigger: 'case.created', templateId: tpl.id, enabled: true },
+        { id, name: 'New rule', trigger: 'case.created', templateId: tpl.id, enabled: true },
       ],
     });
+    setExpandedRules((ids) => [...ids, id]);
   }
 
   function deleteAutomationRule(id: string) {
     patch({ automationRules: settings!.automationRules.filter((r) => r.id !== id) });
+    setExpandedRules((ids) => ids.filter((x) => x !== id));
+  }
+
+  function toggleAutomationRule(id: string) {
+    setExpandedRules((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   }
 
   function updateRecipient(id: string, p: Partial<AutomationRecipient>) {
@@ -316,6 +324,15 @@ export function AutomationPage() {
             {settings.automationRules.map((r) => (
               <div key={r.id} className="rounded-xl border border-line px-4 py-3">
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleAutomationRule(r.id)}
+                    className="rounded-lg p-1.5 text-muted hover:text-ink focus-ring"
+                    title={expandedRules.includes(r.id) ? 'Collapse rule' : 'Expand rule'}
+                    aria-expanded={expandedRules.includes(r.id)}
+                  >
+                    {expandedRules.includes(r.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </button>
                   <input
                     type="checkbox"
                     className="h-4 w-4 focus-ring"
@@ -336,7 +353,7 @@ export function AutomationPage() {
                   {' '}send <span className="text-accent">{templateName(r.templateId)}</span>
                 </p>
                 <p className="mt-1 text-xs text-muted">{ruleConditionText(r)}</p>
-                {editable && (
+                {editable && expandedRules.includes(r.id) && (
                   <div className="mt-3 flex flex-col gap-3 rounded-xl border border-line/70 bg-[var(--pf-surface)] p-3">
                     <div className="grid gap-3 md:grid-cols-2">
                       <Field label="Rule name">

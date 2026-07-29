@@ -10,7 +10,6 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
   const navigate = useNavigate();
   const [organizationName, setOrg] = React.useState(APP_CONFIG.defaults.organizationName);
   const [caseNumberPrefix, setPrefix] = React.useState(APP_CONFIG.defaults.caseNumberPrefix);
-  const [demoDataInstalled, setDemo] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [workspace, setWorkspace] = React.useState<WorkspaceInfo | null>(null);
   const [workspaceBusy, setWorkspaceBusy] = React.useState(false);
@@ -54,7 +53,9 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
   async function finish() {
     setBusy(true);
     await platform().system.completeSetup({
-      organizationName, caseNumberPrefix, demoDataInstalled,
+      organizationName,
+      caseNumberPrefix,
+      demoDataInstalled: false,
     });
     setBusy(false);
     onDone?.();
@@ -96,10 +97,6 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
               <GlassInput value={caseNumberPrefix} onChange={(e) => setPrefix(e.target.value)} />
             </Field>
           </div>
-          <label className="flex items-center gap-2 rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2.5 text-sm text-ink">
-            <input type="checkbox" className="h-4 w-4 focus-ring" checked={demoDataInstalled} onChange={(e) => setDemo(e.target.checked)} />
-            Install fictional demonstration data (recommended for exploring the app)
-          </label>
         </div>
 
         <div className="mt-6 flex justify-end">

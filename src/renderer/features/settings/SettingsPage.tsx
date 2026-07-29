@@ -994,7 +994,6 @@ export function SettingsPage() {
   const [connecting, setConnecting] = React.useState(false);
   const [m365ConnectBusy, setM365ConnectBusy] = React.useState(false);
   const [m365Email, setM365Email] = React.useState('');
-  const [m365ClientId, setM365ClientId] = React.useState('');
   const [m365Error, setM365Error] = React.useState('');
   const [m365TestBusy, setM365TestBusy] = React.useState(false);
   const [m365TestResult, setM365TestResult] = React.useState('');
@@ -1227,45 +1226,61 @@ export function SettingsPage() {
     setM365ConnectBusy(true);
 
     const email = m365Email.trim();
-    const clientId = m365ClientId.trim();
-    const graph = graphBridge();
+    const isDesktop = !!workspaceBridge();
+    const outlook = outlookBridge();
 
     try {
-      if (clientId && graph) {
-      try {
-        const device = await graph.startDeviceLogin({ clientId });
-        setM365TestResult(device.message || `Open ${device.verification_uri} and enter code ${device.user_code}.`);
-        const token = await graph.pollDeviceLogin({
-          clientId,
-          deviceCode: device.device_code,
-          interval: device.interval,
-          expiresIn: device.expires_in,
-        });
-        const profile = await graph.profile({ accessToken: token.access_token });
-        const signedInEmail = profile.mail || profile.userPrincipalName || email;
-        if (signedInEmail && signedInEmail.toLowerCase() !== email.toLowerCase()) {
-          throw new Error(`Signed in as ${signedInEmail}, but the mailbox field contains ${email}.`);
+      if (isDesktop && outlook) {
+        try {
+          const accounts = await outlook.accounts();
+          const match = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase());
+          if (accounts.length && !match) {
+            throw new Error(
+              `Outlook is available, but ${email} was not found in this Windows profile. Open Outlook with that mailbox first, then try again.`,
+            );
+          }
+          const s = await platform().system.updateSettings({
+            m365: {
+              connected: true,
+              accountEmail: email,
+              connectedAt: new Date().toISOString(),
+              connectedBy: user?.name,
+              mode: 'outlook',
+              fallback: 'mailto',
+            },
+          });
+          setSettings(s);
+          setConnecting(false);
+          setM365Email('');
+          setM365TestResult(`Connected local Outlook desktop automation for ${email}.`);
+          return;
+        } catch (e) {
+          const bridge = mailBridge();
+          if (!bridge) throw e;
+          await bridge.openDraft({
+            to: email,
+            subject: `PrivacyFlow Outlook fallback test (${new Date().toLocaleString()})`,
+            body: 'PrivacyFlow could not verify local Outlook automation, so it opened this fallback draft.',
+          });
+          const s = await platform().system.updateSettings({
+            m365: {
+              connected: true,
+              accountEmail: email,
+              connectedAt: new Date().toISOString(),
+              connectedBy: user?.name,
+              mode: 'mailto',
+              fallback: 'mailto',
+            },
+          });
+          setSettings(s);
+          setConnecting(false);
+          setM365Email('');
+          setM365Error(`Local Outlook PowerShell automation could not be verified, so PrivacyFlow connected mailto fallback instead: ${e instanceof Error ? e.message : 'Outlook automation failed.'}`);
+          return;
         }
-        const s = await platform().system.updateSettings({
-          m365: {
-            connected: true,
-            accountEmail: signedInEmail,
-            connectedAt: new Date().toISOString(),
-            connectedBy: user?.name,
-            mode: 'graph',
-            clientId,
-            accessToken: token.access_token,
-            refreshToken: token.refresh_token,
-            expiresAt: graphTokenExpiry(token.expires_in),
-          },
-        });
-        setSettings(s);
-        setConnecting(false);
-        setM365Email('');
-        setM365ClientId('');
-        setM365TestResult(`Microsoft Graph connected for ${signedInEmail}.`);
-        return;
-      } catch (e) {
+      }
+
+      if (isDesktop) {
         const s = await platform().system.updateSettings({
           m365: {
             connected: true,
@@ -1279,10 +1294,8 @@ export function SettingsPage() {
         setSettings(s);
         setConnecting(false);
         setM365Email('');
-        setM365ClientId('');
-        setM365Error(`Microsoft Graph sign-in did not complete, so PrivacyFlow connected mailto draft fallback instead: ${e instanceof Error ? e.message : 'Graph sign-in failed.'}`);
+        setM365TestResult('Connected mailto draft fallback because the local Outlook bridge was unavailable.');
         return;
-      }
       }
 
       const s = await platform().system.updateSettings({
@@ -1291,15 +1304,13 @@ export function SettingsPage() {
           accountEmail: email,
           connectedAt: new Date().toISOString(),
           connectedBy: user?.name,
-          mode: graph ? 'mailto' : 'simulated',
-          fallback: graph ? 'mailto' : undefined,
+          mode: 'simulated',
         },
       });
       setSettings(s);
       setConnecting(false);
       setM365Email('');
-      setM365ClientId('');
-      setM365TestResult(graph ? 'Connected mailto draft fallback. Microsoft Graph was skipped because no Application (client) ID was entered.' : 'Browser preview is in simulated mode.');
+      setM365TestResult('Browser preview is in simulated mode.');
     } finally {
       setM365ConnectBusy(false);
     }
@@ -1562,9 +1573,9 @@ export function SettingsPage() {
           ) : (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted">
-                Connect a Microsoft 365 mailbox so automated template emails can send with delegated
-                Microsoft Graph user consent. If Graph consent is blocked or skipped, PrivacyFlow uses
-                mailto draft fallback without PowerShell.
+                Connect a Microsoft 365 mailbox so automated template emails open as Outlook desktop
+                drafts using local PowerShell automation. If Outlook automation is unavailable,
+                PrivacyFlow uses mailto draft fallback.
               </p>
 
               {!connecting ? (
@@ -1586,19 +1597,12 @@ export function SettingsPage() {
                       autoFocus
                     />
                   </Field>
-                  <Field label="Application (client) ID" hint="Optional. Enter a public-client Microsoft Entra app ID to try delegated Graph sign-in with Mail.Send. Leave blank to use mailto fallback.">
-                    <GlassInput
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      value={m365ClientId}
-                      onChange={(e) => setM365ClientId(e.target.value)}
-                    />
-                  </Field>
                   {m365TestResult && <p className="text-xs text-emerald-300 whitespace-pre-wrap">{m365TestResult}</p>}
                   {m365Error && <p className="text-xs text-red-400">{m365Error}</p>}
                   <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
                     <p className="text-[11px] text-muted">
-                      Graph uses device-code sign-in and requests only openid, profile, User.Read, Mail.Send, and offline_access. If your tenant requires admin approval, PrivacyFlow connects the mailto fallback instead.
+                      In the packaged Windows app, Connect uses local Outlook desktop automation through PowerShell to open drafts from the mailbox configured in this Windows profile. If that automation is unavailable, PrivacyFlow falls back to opening mailto drafts.
                     </p>
                   </div>
                   <div className="flex justify-end gap-2">

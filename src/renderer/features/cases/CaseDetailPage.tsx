@@ -761,10 +761,7 @@ export function CaseDetailPage() {
             <GlassPanel>
               {audit.length === 0 ? <EmptyState title="No audit events" icon={<ShieldCheck className="h-6 w-6" />} /> : (
                 <div className="flex flex-col gap-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2">
-                    <p className="text-xs font-medium text-muted">
-                      Showing {auditStart + 1}-{Math.min(auditStart + auditPageSize, auditRows.length)} of {auditRows.length}
-                    </p>
+                  <div className="flex flex-wrap items-center justify-end gap-3 rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <GlassSelect
                         className="w-36"

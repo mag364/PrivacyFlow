@@ -325,13 +325,6 @@ async function runAutomations(
   const m365 = d.settings.m365;
   const viaM365 = !!m365?.connected;
   const sender = viaM365 ? (m365.accountEmail ?? 'connected mailbox') : null;
-  const sendStatus = viaM365
-    ? (
-        m365.mode === 'outlook'
-          ? 'Opened in Outlook'
-          : 'Sent via Microsoft 365 (simulated)'
-      )
-    : 'Sent (automated)';
 
   for (const rule of rules) {
     if (trigger === 'status.changed' && rule.toStatus && rule.toStatus !== ctx.toStatus) continue;
@@ -354,16 +347,33 @@ async function runAutomations(
     const outlook = m365?.mode === 'outlook' ? outlookBridge() : null;
     const fallbackDraft = m365?.mode === 'outlook' ? mailBridge() : null;
     let deliveryNote = '';
+    let deliveryStatus = 'Logged only';
 
     if (m365?.mode === 'outlook' && /.+@.+\..+/.test(recipient)) {
-      if (outlook) {
-        await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, subject, body });
-      } else if (fallbackDraft) {
-        await fallbackDraft.openDraft({ to: recipient, subject, body });
-        deliveryNote = '\n\nOpened with the default mail app because local Outlook automation was unavailable.';
+      try {
+        if (outlook) {
+          await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, subject, body });
+          deliveryStatus = 'Draft opened in Outlook';
+        } else if (fallbackDraft) {
+          await fallbackDraft.openDraft({ to: recipient, subject, body });
+          deliveryStatus = 'Draft opened in default mail app';
+          deliveryNote = '\n\nOpened with the default mail app because local Outlook automation was unavailable.';
+        } else {
+          deliveryStatus = 'Draft not opened';
+          deliveryNote = '\n\nDraft was not opened because local Outlook automation is unavailable in this environment.';
+        }
+      } catch (e) {
+        deliveryStatus = 'Draft not opened';
+        deliveryNote = `\n\nDraft was not opened: ${e instanceof Error ? e.message : 'Outlook automation failed.'}`;
       }
     } else if (m365?.mode === 'outlook') {
+      deliveryStatus = 'Draft not opened';
       deliveryNote = `\n\nOutlook draft was not opened because ${recipient} does not have a configured email address. Add it in Automation > Recipients.`;
+    } else if (m365?.mode === 'simulated') {
+      deliveryStatus = 'Simulated only';
+      deliveryNote = '\n\nBrowser preview records simulated delivery only. Open the Windows desktop app and connect Microsoft 365 (Outlook) to create drafts.';
+    } else {
+      deliveryNote = '\n\nNo Microsoft 365 (Outlook) mailbox is connected, so PrivacyFlow logged this automation only.';
     }
 
     d.communications.push({
@@ -374,19 +384,19 @@ async function runAutomations(
       subject,
       summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipientLabel}${deliveryNote}\n\n${body}`,
       sentAt: now,
-      status: sendStatus,
+      status: deliveryStatus,
       createdBy: 'automation',
     });
     c.lastActivityAt = now;
 
     await appendAudit(d, { id: 'automation', name: 'Automation engine', role: 'system' }, {
       category: 'Automation',
-      action: 'automation.email_sent',
+      action: 'automation.email_draft',
       entityType: 'communication',
       entityId: c.id,
       caseId: c.id,
-      summary: `Automated email "${tpl.name}" sent to ${recipientLabel} (${rule.name})${sender ? ` via ${sender}` : ''}`,
-      newValue: { rule: rule.name, template: tpl.name, recipient: recipientLabel, subject, via: sender ?? 'local log' },
+      summary: `Automated email "${tpl.name}" ${deliveryStatus.toLowerCase()} for ${recipientLabel} (${rule.name})${sender ? ` via ${sender}` : ''}`,
+      newValue: { rule: rule.name, template: tpl.name, recipient: recipientLabel, subject, status: deliveryStatus, via: sender ?? 'local log' },
     });
   }
 }

@@ -402,7 +402,7 @@ export function AutomationPage() {
       <GlassPanel className="mt-4">
         <p className="text-xs text-muted">
           All automation changes are recorded in the audit trail and take effect immediately after saving.
-          Automated sends appear on each request's Communications tab marked "Sent (automated)".
+          Automation results appear on each request's Communications tab as draft/log entries.
         </p>
       </GlassPanel>
     </div>

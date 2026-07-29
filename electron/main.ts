@@ -97,6 +97,14 @@ function listBackups(): BackupEntry[] {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+function backupFilePath(fileName: string): string {
+  if (!/^[\w.-]+\.db\.json$/.test(fileName)) throw new Error('Invalid backup file.');
+  const dir = backupDir();
+  const filePath = path.resolve(dir, fileName);
+  if (!filePath.startsWith(`${path.resolve(dir)}${path.sep}`)) throw new Error('Invalid backup file.');
+  return filePath;
+}
+
 function pruneBackups(): void {
   const backups = listBackups();
   backups.slice(BACKUP_LIMIT).forEach((entry) => {
@@ -132,11 +140,8 @@ function restoreBackup(fileName: string): { restored: BackupEntry; safetyBackup:
     );
   }
 
-  if (!/^[\w.-]+\.db\.json$/.test(fileName)) throw new Error('Invalid backup file.');
-  const backupPath = path.join(backupDir(), fileName);
-  if (!backupPath.startsWith(`${backupDir()}${path.sep}`) || !fs.existsSync(backupPath)) {
-    throw new Error('Backup file was not found.');
-  }
+  const backupPath = backupFilePath(fileName);
+  if (!fs.existsSync(backupPath)) throw new Error('Backup file was not found.');
 
   const raw = fs.readFileSync(backupPath, 'utf8');
   JSON.parse(raw);
@@ -145,6 +150,13 @@ function restoreBackup(fileName: string): { restored: BackupEntry; safetyBackup:
   fs.writeFileSync(tmp, raw, 'utf8');
   fs.renameSync(tmp, dbPath);
   return { restored: backupEntry(fileName), safetyBackup };
+}
+
+function deleteBackup(fileName: string): boolean {
+  const backupPath = backupFilePath(fileName);
+  if (!fs.existsSync(backupPath)) throw new Error('Backup file was not found.');
+  fs.unlinkSync(backupPath);
+  return true;
 }
 
 let lock = new WorkspaceLock(dbPath, os.userInfo().username);
@@ -258,6 +270,12 @@ ipcMain.handle('backup:restore', async (_e, input: { fileName?: string }) => {
   const fileName = String(input?.fileName || '').trim();
   if (!fileName) throw new Error('Choose a backup to restore.');
   return restoreBackup(fileName);
+});
+
+ipcMain.handle('backup:delete', async (_e, input: { fileName?: string }) => {
+  const fileName = String(input?.fileName || '').trim();
+  if (!fileName) throw new Error('Choose a backup to delete.');
+  return deleteBackup(fileName);
 });
 
 ipcMain.handle('updater:downloadReleaseAsset', async (_e, input: { assetApiUrl?: string; token?: string; fileName?: string }) => {

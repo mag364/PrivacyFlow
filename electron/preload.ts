@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('privacyflow', {
     list: () => ipcRenderer.invoke('backup:list'),
     create: () => ipcRenderer.invoke('backup:create'),
     restore: (input: { fileName: string }) => ipcRenderer.invoke('backup:restore', input),
+    delete: (input: { fileName: string }) => ipcRenderer.invoke('backup:delete', input),
   },
   mail: {
     openDraft: (input: { to: string; subject: string; body: string }) => ipcRenderer.invoke('mail:openDraft', input),

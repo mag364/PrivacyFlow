@@ -70,6 +70,7 @@ export interface BackupBridge {
   list: () => Promise<BackupEntry[]>;
   create: () => Promise<BackupEntry>;
   restore: (input: { fileName: string }) => Promise<RestoreBackupResult>;
+  delete: (input: { fileName: string }) => Promise<boolean>;
 }
 
 export interface MailDraftInput {

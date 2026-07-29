@@ -737,8 +737,10 @@ function ImportExportTab() {
 }
 
 function BackupRestoreTab() {
+  const PAGE_SIZE = 10;
   const [backups, setBackups] = React.useState<BackupEntry[]>([]);
   const [selected, setSelected] = React.useState('');
+  const [page, setPage] = React.useState(1);
   const [busy, setBusy] = React.useState('');
   const [message, setMessage] = React.useState('');
   const [error, setError] = React.useState('');
@@ -749,7 +751,10 @@ function BackupRestoreTab() {
     if (!bridge) return;
     const list = await bridge.list();
     setBackups(list);
-    setSelected(nextSelected ?? list[0]?.fileName ?? '');
+    const nextFileName = nextSelected ?? list[0]?.fileName ?? '';
+    const nextIndex = Math.max(0, list.findIndex((backup) => backup.fileName === nextFileName));
+    setSelected(nextFileName);
+    setPage(nextFileName ? Math.floor(nextIndex / PAGE_SIZE) + 1 : 1);
   }
 
   React.useEffect(() => {
@@ -798,6 +803,30 @@ function BackupRestoreTab() {
     }
   }
 
+  async function deleteSelectedBackup(fileName: string) {
+    if (!bridge) return;
+    if (!window.confirm(`Delete backup ${fileName}? This only removes the local backup file.`)) return;
+    setBusy(`delete:${fileName}`);
+    setMessage('');
+    setError('');
+    try {
+      await bridge.delete({ fileName });
+      const list = await bridge.list();
+      setBackups(list);
+      const nextSelected = selected === fileName
+        ? list[Math.min(list.length - 1, Math.max(0, backups.findIndex((backup) => backup.fileName === fileName)))]?.fileName ?? ''
+        : selected;
+      setSelected(nextSelected);
+      const nextIndex = Math.max(0, list.findIndex((backup) => backup.fileName === nextSelected));
+      setPage(nextSelected ? Math.floor(nextIndex / PAGE_SIZE) + 1 : 1);
+      setMessage(`Deleted local backup ${fileName}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to delete backup.');
+    } finally {
+      setBusy('');
+    }
+  }
+
   if (!bridge) {
     return (
       <GlassPanel>
@@ -817,6 +846,9 @@ function BackupRestoreTab() {
   }
 
   const selectedBackup = backups.find((item) => item.fileName === selected);
+  const pageCount = Math.max(1, Math.ceil(backups.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const visibleBackups = backups.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <GlassPanel>
@@ -842,10 +874,11 @@ function BackupRestoreTab() {
                   <th className="px-4 py-3">Backup</th>
                   <th className="px-4 py-3">Reason</th>
                   <th className="px-4 py-3">Size</th>
+                  <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {backups.map((backup) => (
+                {visibleBackups.map((backup) => (
                   <tr
                     key={backup.id}
                     className={clsx(
@@ -864,6 +897,21 @@ function BackupRestoreTab() {
                       </GlassBadge>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">{fmtBytes(backup.sizeBytes)}</td>
+                    <td className="px-4 py-3">
+                      <GlassButton
+                        variant="ghost"
+                        className="px-2 py-1 text-xs text-red-400 hover:text-red-300"
+                        title={`Delete ${backup.fileName}`}
+                        disabled={!!busy}
+                        loading={busy === `delete:${backup.fileName}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void deleteSelectedBackup(backup.fileName);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </GlassButton>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -871,6 +919,23 @@ function BackupRestoreTab() {
           ) : (
             <div className="p-4 text-sm text-muted">
               No local backups yet. Create one manually, or make a normal workspace edit in the desktop app.
+            </div>
+          )}
+
+          {backups.length > PAGE_SIZE && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3 text-xs text-muted">
+              <span>
+                Showing {((safePage - 1) * PAGE_SIZE) + 1}-{Math.min(safePage * PAGE_SIZE, backups.length)} of {backups.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <GlassButton className="px-3 py-1.5 text-xs" disabled={safePage <= 1 || !!busy} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                  Previous
+                </GlassButton>
+                <span>Page {safePage} of {pageCount}</span>
+                <GlassButton className="px-3 py-1.5 text-xs" disabled={safePage >= pageCount || !!busy} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>
+                  Next
+                </GlassButton>
+              </div>
             </div>
           )}
         </div>

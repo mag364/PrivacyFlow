@@ -79,7 +79,7 @@ function backupReason(value: string): string {
 function backupEntry(fileName: string): BackupEntry {
   const filePath = path.join(backupDir(), fileName);
   const stats = fs.statSync(filePath);
-  const match = /^privacyflow-([a-z0-9-]+)-/.exec(fileName);
+  const match = /^privacyflow-(.+)-\d{8}-?\d{6}-\d{3}\.db\.json$/.exec(fileName);
   return {
     id: fileName,
     fileName,
@@ -92,7 +92,7 @@ function backupEntry(fileName: string): BackupEntry {
 
 function listBackups(): BackupEntry[] {
   return fs.readdirSync(backupDir())
-    .filter((fileName) => /^privacyflow-[a-z0-9-]+-\d{8}-\d{6}-\d{3}\.db\.json$/.test(fileName))
+    .filter((fileName) => /^privacyflow-.+-\d{8}-?\d{6}-\d{3}\.db\.json$/.test(fileName))
     .map(backupEntry)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -113,9 +113,8 @@ function createBackup(reason: string, content?: string): BackupEntry | null {
   const raw = content ?? fs.readFileSync(dbPath, 'utf8');
   JSON.parse(raw);
   const now = new Date();
-  const stamp = now.toISOString()
-    .replace(/[-:TZ]/g, '')
-    .replace(/\.(\d{3}).*/, '-$1');
+  const iso = now.toISOString();
+  const stamp = `${iso.slice(0, 10).replace(/-/g, '')}-${iso.slice(11, 19).replace(/:/g, '')}-${iso.slice(20, 23)}`;
   const fileName = `privacyflow-${backupReason(reason)}-${stamp}.db.json`;
   const filePath = path.join(backupDir(), fileName);
   fs.writeFileSync(filePath, raw, 'utf8');

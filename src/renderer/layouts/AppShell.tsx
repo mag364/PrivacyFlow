@@ -186,8 +186,14 @@ function YearAccordion({
         </button>
       </div>
 
-      {open && (
-        <div className="ml-4 mt-1 flex flex-col gap-0.5 border-l border-line pl-3">
+      <div
+        className={clsx(
+          'grid transition-[grid-template-rows,opacity] duration-200 ease-out',
+          open ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0',
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="ml-4 mt-1 flex flex-col gap-0.5 border-l border-line pl-3">
           <NavLink
             to={basePath}
             end
@@ -250,8 +256,9 @@ function YearAccordion({
               <PlusCircle className="h-3 w-3" /> Add year
             </button>
           )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

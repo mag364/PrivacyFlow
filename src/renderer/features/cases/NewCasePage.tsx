@@ -28,7 +28,7 @@ export function NewCasePage() {
   const [minor, setMinor] = React.useState(false);
   const [authorizedAgent, setAgent] = React.useState(false);
 
-  const [requestTypes, setRequestTypes] = React.useState<string[]>(['Access']);
+  const [requestTypes, setRequestTypes] = React.useState<string[]>([]);
   const [intakeChannel, setChannel] = React.useState<string>('Email');
   const [dateCsReceived, setDateCsReceived] = React.useState('');
   const [dateDppReceived, setDateDppReceived] = React.useState('');

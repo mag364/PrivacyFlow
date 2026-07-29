@@ -24,6 +24,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { WorkspaceLock, type LockState } from './lockfile';
 
@@ -116,14 +117,34 @@ function pruneBackups(): void {
   });
 }
 
+function hashContent(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+function latestBackupMatches(raw: string): BackupEntry | null {
+  const latest = listBackups()[0];
+  if (!latest) return null;
+  try {
+    const latestRaw = fs.readFileSync(latest.filePath, 'utf8');
+    return hashContent(latestRaw) === hashContent(raw) ? latest : null;
+  } catch {
+    return null;
+  }
+}
+
 function createBackup(reason: string, content?: string): BackupEntry | null {
   if (!content && !fs.existsSync(dbPath)) return null;
   const raw = content ?? fs.readFileSync(dbPath, 'utf8');
   JSON.parse(raw);
+  const normalizedReason = backupReason(reason);
+  if (normalizedReason === 'startup' || normalizedReason === 'auto') {
+    const duplicate = latestBackupMatches(raw);
+    if (duplicate) return duplicate;
+  }
   const now = new Date();
   const iso = now.toISOString();
   const stamp = `${iso.slice(0, 10).replace(/-/g, '')}-${iso.slice(11, 19).replace(/:/g, '')}-${iso.slice(20, 23)}`;
-  const fileName = `privacyflow-${backupReason(reason)}-${stamp}.db.json`;
+  const fileName = `privacyflow-${normalizedReason}-${stamp}.db.json`;
   const filePath = path.join(backupDir(), fileName);
   fs.writeFileSync(filePath, raw, 'utf8');
   pruneBackups();

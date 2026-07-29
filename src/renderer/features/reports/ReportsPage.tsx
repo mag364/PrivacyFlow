@@ -26,11 +26,13 @@ function groupKey(p: Project): string {
 }
 
 const tooltipStyle = {
-  background: 'var(--pf-surface-solid)',
-  border: '1px solid var(--pf-border)',
+  background: '#111827',
+  border: '1px solid #334155',
   borderRadius: 12,
-  color: 'var(--pf-text)',
+  color: '#ffffff',
 } as const;
+
+const tooltipTextStyle = { color: '#ffffff' } as const;
 
 export function ReportsPage() {
   const [m, setM] = React.useState<DashboardMetrics | null>(null);
@@ -229,7 +231,7 @@ export function ReportsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--pf-border)" />
               <XAxis dataKey="name" stroke="var(--pf-text-muted)" fontSize={11} />
               <YAxis allowDecimals={false} stroke="var(--pf-text-muted)" fontSize={11} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipTextStyle} itemStyle={tooltipTextStyle} />
               <Bar dataKey="value" fill="#54d6a1" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -250,7 +252,7 @@ export function ReportsPage() {
               >
                 {projectsByClass.map((_, i) => <Cell key={i} fill={COLORS[(i + 2) % COLORS.length]} />)}
               </Pie>
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipTextStyle} itemStyle={tooltipTextStyle} />
             </PieChart>
           </ResponsiveContainer>
         </GlassCard>

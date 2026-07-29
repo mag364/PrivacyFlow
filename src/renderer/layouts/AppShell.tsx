@@ -118,11 +118,11 @@ function YearAccordion({
   const yearMatch = location.pathname.match(new RegExp(`^${basePath}/year/(\\d{4})`));
   const activeYear = yearMatch ? Number(yearMatch[1]) : null;
   const onSection = location.pathname.startsWith(basePath);
-  // Auto-expand while anywhere inside the section; otherwise remember the
-  // user's toggle for the session.
+  // Auto-expand while anywhere inside the section, then collapse when another
+  // nav section is selected.
   const [open, setOpen] = React.useState(onSection);
   React.useEffect(() => {
-    if (onSection) setOpen(true);
+    setOpen(onSection);
   }, [onSection]);
 
   React.useEffect(() => {

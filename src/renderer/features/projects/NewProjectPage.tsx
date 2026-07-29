@@ -67,6 +67,7 @@ export function NewProjectPage() {
     if (appliedProjectNumber.current === normalizedNumber) return;
     appliedProjectNumber.current = normalizedNumber;
 
+    setProjectName(matchedProject.projectName);
     setFiscalYear(matchedProject.fiscalYear ?? '');
     setPiaNumber(matchedProject.piaNumber ?? '');
     setSsdsTask(matchedProject.ssdsTask ?? '');

@@ -152,16 +152,14 @@ export function ReportsPage() {
       {
         name: 'Requests Detail',
         rows: [
-          ['Request', 'Request ID', 'Subject', 'Types', 'Status', 'Jurisdiction', 'Date Received', 'Date Due'],
+          ['Request', 'Request ID', 'Subject', 'Types', 'Status', 'Date Received'],
           ...cases.map((c) => [
             c.caseNumber,
             c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? '—',
             c.subject.lastName,
             c.requestTypes.join('; '),
             c.status,
-            String(c.jurisdiction),
             fmtDate(c.intakeDates?.dateDppReceivedEmail ?? c.sla.receivedDate),
-            fmtDate(c.sla.currentDueDate),
           ]),
         ],
       },

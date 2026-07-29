@@ -10,7 +10,7 @@ import type {
   DsrCase, CaseNote, Communication, CaseDocument, AuditEvent,
 } from '@shared/types';
 import {
-  CASE_STATUSES, JURISDICTIONS, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES,
+  CASE_STATUSES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES,
   RELATIONSHIP_TYPES, REQUEST_TYPES,
 } from '@shared/constants';
 import {
@@ -37,7 +37,6 @@ interface EditDraft {
   // Request
   requestTypes: string[];
   description: string;
-  jurisdiction: string;
   intakeChannel: string;
   // Requester
   requestId: string;
@@ -133,7 +132,6 @@ export function CaseDetailPage() {
     setDraft({
       requestTypes: c!.requestTypes.map(String),
       description: c!.description,
-      jurisdiction: String(c!.jurisdiction),
       intakeChannel: String(c!.intakeChannel),
       requestId:
         c!.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c!.subject.firstName ?? '',
@@ -168,7 +166,6 @@ export function CaseDetailPage() {
       await platform().cases.update(id, {
         requestTypes: draft.requestTypes,
         description: draft.description,
-        jurisdiction: draft.jurisdiction,
         intakeChannel: draft.intakeChannel,
         subject: {
           ...c!.subject,
@@ -398,7 +395,6 @@ export function CaseDetailPage() {
                     <h3 className="mb-3 text-sm font-semibold text-ink">Details</h3>
                     <dl className="grid gap-2 text-sm sm:grid-cols-2">
                       <Row k="Request types" v={c.requestTypes.join(', ')} />
-                      <Row k="Jurisdiction" v={c.jurisdiction} />
                       <Row k="Intake channel" v={c.intakeChannel} />
                       <Row k="Client Center Status" v={c.subject.clientCenterStatus ?? '—'} />
                       <Row k="Emailed FA" v={fmtDate(c.subject.emailedFA)} />
@@ -441,12 +437,7 @@ export function CaseDetailPage() {
                           ))}
                         </div>
                       </Field>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Jurisdiction">
-                          <GlassSelect value={draft.jurisdiction} onChange={(e) => setD({ jurisdiction: e.target.value })}>
-                            {JURISDICTIONS.map((j) => <option key={j}>{j}</option>)}
-                          </GlassSelect>
-                        </Field>
+                      <div className="grid grid-cols-1 gap-3">
                         <Field label="Intake channel">
                           <GlassSelect value={draft.intakeChannel} onChange={(e) => setD({ intakeChannel: e.target.value })}>
                             {INTAKE_CHANNELS.map((ch) => <option key={ch}>{ch}</option>)}

@@ -20,7 +20,6 @@ export function CasesPage() {
   const [q, setQ] = React.useState('');
   const [status, setStatus] = React.useState<StatusFilter>('open');
   const [type, setType] = React.useState<string>('all');
-  const [sort, setSort] = React.useState<'due' | 'recent'>('recent');
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -49,16 +48,13 @@ export function CasesPage() {
     if (type !== 'all' && !c.requestTypes.map(String).includes(type)) return false;
     if (q) {
       const requestId = c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '';
-      const hay = `${c.caseNumber} ${requestId} ${c.subject.lastName} ${c.subject.emails.join(' ')} ${c.jurisdiction}`.toLowerCase();
+      const hay = `${c.caseNumber} ${requestId} ${c.subject.lastName} ${c.subject.emails.join(' ')}`.toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
   });
 
-  rows = [...rows].sort((a, b) => {
-    if (sort === 'recent') return b.lastActivityAt.localeCompare(a.lastActivityAt);
-    return a.sla.currentDueDate.localeCompare(b.sla.currentDueDate);
-  });
+  rows = [...rows].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 
   function showAllYears() {
     clearLastYear('cases');
@@ -69,7 +65,7 @@ export function CasesPage() {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
     const header = [
-      'Request', 'Status', 'Request Types', 'Jurisdiction', 'Intake Channel',
+      'Request', 'Status', 'Request Types', 'Intake Channel',
       'Team', 'Business Unit', 'Description',
       'Request ID', 'Requester Last Name', 'Requester Emails',
       'Relationship', 'Minor', 'Authorized Agent',
@@ -84,7 +80,6 @@ export function CasesPage() {
       c.caseNumber,
       c.status,
       c.requestTypes.join('; '),
-      c.jurisdiction,
       c.intakeChannel,
       c.team,
       c.businessUnit,
@@ -153,10 +148,6 @@ export function CasesPage() {
         <GlassSelect className="w-44" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="all">All types</option>
           {REQUEST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </GlassSelect>
-        <GlassSelect className="w-40" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-          <option value="recent">Sort: Recent</option>
-          <option value="due">Sort: Due date</option>
         </GlassSelect>
       </div>
 

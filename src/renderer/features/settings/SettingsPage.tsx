@@ -9,7 +9,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { platform } from '../../platform';
 import type { OrgSettings, User } from '@shared/types';
-import { JURISDICTIONS, ROLE_LABELS, ROLES } from '@shared/constants';
+import { ROLE_LABELS, ROLES } from '@shared/constants';
 import type { Role } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassPanel, GlassButton, GlassInput, GlassSelect, GlassBadge, Field, Spinner } from '../../components/glass';
@@ -607,7 +607,7 @@ function ImportExportTab() {
     try {
       const settings = await platform().system.settings();
       const rows = await rowsFromFile(file);
-      const inputs = rows.map((row) => caseInputFromRow(row, { jurisdiction: settings.defaultJurisdiction }));
+      const inputs = rows.map((row) => caseInputFromRow(row, { jurisdiction: 'US' }));
       const summary = await platform().system.importCases(inputs);
       setResult(`Request import complete: ${summaryText(summary)}.`);
       if (summary.errors.length) setError(summary.errors.slice(0, 5).join('\n'));
@@ -668,7 +668,7 @@ function ImportExportTab() {
             <p className="text-sm font-semibold text-ink">Requests</p>
           </div>
           <p className="mb-3 text-xs text-muted">
-            Import Smartsheet or Excel exports as CSV, TSV, or .xlsx. Recognized columns include Request, Request ID, Subject, Email, Types, Status, Jurisdiction, Date Received, and Description.
+            Import Smartsheet or Excel exports as CSV, TSV, or .xlsx. Recognized columns include Request, Request ID, Subject, Email, Types, Status, Date Received, and Description.
           </p>
           <input
             ref={requestRef}
@@ -1047,11 +1047,6 @@ export function SettingsPage() {
                 <GlassInput disabled={!editable} type="number" value={settings.autoLockMinutes} onChange={(e) => setSettings({ ...settings, autoLockMinutes: Number(e.target.value) })} />
               </Field>
             </div>
-            <Field label="Default jurisdiction">
-              <GlassSelect disabled={!editable} value={settings.defaultJurisdiction} onChange={(e) => setSettings({ ...settings, defaultJurisdiction: e.target.value })}>
-                {JURISDICTIONS.map((j) => <option key={j}>{j}</option>)}
-              </GlassSelect>
-            </Field>
             {editable && (
               <div className="flex items-center gap-2 pt-1">
                 <GlassButton variant="primary" onClick={save}>

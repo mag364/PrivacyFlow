@@ -58,7 +58,7 @@ function defaultEmailTemplates(): EmailTemplate[] {
       id: 'tpl-acknowledgement',
       name: 'Request acknowledgement',
       subject: 'We received your privacy request ({{case.number}})',
-      body: 'Dear {{requester.lastName}},\n\nThis confirms we have received your {{case.types}} request, logged as {{case.number}} on {{case.receivedDate}}. We will respond by {{case.dueDate}}.\n\nKind regards,\n{{org.name}} Privacy Office',
+      body: 'Dear {{requester.lastName}},\n\nThis confirms we have received your {{case.types}} request, logged as {{case.number}} on {{case.receivedDate}}.\n\nKind regards,\n{{org.name}} Privacy Office',
       audience: 'requester',
     },
     {
@@ -71,8 +71,8 @@ function defaultEmailTemplates(): EmailTemplate[] {
     {
       id: 'tpl-dept-search',
       name: 'Forward to Ron K.',
-      subject: 'Data search required — {{case.number}} (due {{case.dueDate}})',
-      body: 'Hello {{rule.department}} team,\n\nPlease search your systems for personal data relating to {{requester.lastName}} ({{requester.email}}) in support of privacy request {{case.number}} ({{case.types}}). The statutory due date is {{case.dueDate}}.\n\nThank you,\n{{org.name}} Privacy Office',
+      subject: 'Data search required — {{case.number}}',
+      body: 'Hello {{rule.department}} team,\n\nPlease search your systems for personal data relating to {{requester.lastName}} ({{requester.email}}) in support of privacy request {{case.number}} ({{case.types}}).\n\nThank you,\n{{org.name}} Privacy Office',
       audience: 'department',
       department: 'Customer Support',
     },
@@ -254,9 +254,7 @@ function renderTemplate(text: string, c: DsrCase, orgName: string, department?: 
     'case.number': c.caseNumber,
     'case.types': c.requestTypes.join(', '),
     'case.status': c.status,
-    'case.jurisdiction': String(c.jurisdiction),
     'case.receivedDate': fmtShort(c.sla.receivedDate),
-    'case.dueDate': fmtShort(c.sla.currentDueDate),
     'org.name': orgName,
     'rule.department': department ?? '',
   };

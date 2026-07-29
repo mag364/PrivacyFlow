@@ -111,7 +111,7 @@ export function LoginPage() {
           <div>
             <h2 className="text-xl font-semibold text-ink">Manage data subject requests with confidence.</h2>
             <p className="mt-2 text-sm text-muted">
-              Statutory SLA tracking, role-based workflows, and a tamper-evident audit trail — all stored locally.
+              Request tracking, role-based workflows, and a tamper-evident audit trail - all stored locally.
             </p>
           </div>
           <p className="text-[11px] text-muted">{APP_CONFIG.disclaimer}</p>

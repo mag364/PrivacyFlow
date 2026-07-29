@@ -188,7 +188,7 @@ export function caseInputFromRow(row: TableRow, defaults: { jurisdiction: string
     caseNumberOverride: pick(row, ['Request', 'Case Number', 'CaseNumber']) || undefined,
     requestTypes: requestTypes.length ? requestTypes : ['Access'],
     intakeChannel: pick(row, ['Intake Channel', 'Channel', 'Source']) || 'Email',
-    jurisdiction: pick(row, ['Jurisdiction', 'Region']) || defaults.jurisdiction || 'Other',
+    jurisdiction: defaults.jurisdiction || 'Other',
     priority: pick(row, ['Priority']) || 'Medium',
     risk: pick(row, ['Risk', 'Risk Level']) || 'Medium',
     businessUnit: pick(row, ['Business Unit', 'Department']) || undefined,

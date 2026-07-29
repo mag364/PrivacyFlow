@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { platform } from '../../platform';
 import {
-  REQUEST_TYPES, INTAKE_CHANNELS, JURISDICTIONS, CLIENT_CENTER_STATUSES, RELATIONSHIP_TYPES,
+  REQUEST_TYPES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES, RELATIONSHIP_TYPES,
 } from '@shared/constants';
 import type { NewCaseInput } from '../../platform/types';
 import { PageHeader } from '../../layouts/AppShell';
@@ -27,26 +27,11 @@ export function NewCasePage() {
 
   const [requestTypes, setRequestTypes] = React.useState<string[]>(['Access']);
   const [intakeChannel, setChannel] = React.useState<string>('Email');
-  // Initialized empty; populated from the workspace default jurisdiction
-  // (Settings tab) once settings load, so the form always starts with the
-  // configured default rather than a hardcoded value.
-  const [jurisdiction, setJurisdiction] = React.useState<string>('');
   const [dateCsReceived, setDateCsReceived] = React.useState('');
   const [dateDppReceived, setDateDppReceived] = React.useState('');
   const [standardResponseSent, setStandardResponseSent] = React.useState('');
   const [forwardedToRon, setForwardedToRon] = React.useState('');
   const [description, setDescription] = React.useState('');
-
-  React.useEffect(() => {
-    platform().system.settings().then((s) => {
-      const def = s.defaultJurisdiction;
-      setJurisdiction((cur) =>
-        cur || (JURISDICTIONS.includes(def as typeof JURISDICTIONS[number])
-          ? def
-          : JURISDICTIONS[JURISDICTIONS.length - 1]),
-      );
-    });
-  }, []);
 
   if (!can(user?.role, 'cases.create')) {
     return (
@@ -76,7 +61,7 @@ export function NewCasePage() {
     const input: NewCaseInput = {
       requestTypes,
       intakeChannel,
-      jurisdiction: jurisdiction || 'Other',
+      jurisdiction: 'US',
       priority: 'Medium',
       risk: 'Medium',
       description,
@@ -173,15 +158,10 @@ export function NewCasePage() {
                 ))}
               </div>
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <Field label="Intake channel">
                 <GlassSelect value={intakeChannel} onChange={(e) => setChannel(e.target.value)}>
                   {INTAKE_CHANNELS.map((c) => <option key={c}>{c}</option>)}
-                </GlassSelect>
-              </Field>
-              <Field label="Jurisdiction" hint="Defaults to the workspace default (Settings tab).">
-                <GlassSelect value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}>
-                  {JURISDICTIONS.map((j) => <option key={j}>{j}</option>)}
                 </GlassSelect>
               </Field>
             </div>

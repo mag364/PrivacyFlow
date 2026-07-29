@@ -1,9 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { platform } from '../../platform';
-import { JURISDICTIONS } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
-import { GlassButton, GlassInput, GlassSelect, GlassPanel, Field } from '../../components/glass';
+import { GlassButton, GlassInput, GlassPanel, Field } from '../../components/glass';
 import { chooseWorkspacePath, workspaceBridge, workspaceInfo, type WorkspaceInfo } from '../../platform/workspace';
 import privacyFlowIcon from '../../assets/privacyflow-icon.png';
 
@@ -11,7 +10,6 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
   const navigate = useNavigate();
   const [organizationName, setOrg] = React.useState(APP_CONFIG.defaults.organizationName);
   const [caseNumberPrefix, setPrefix] = React.useState(APP_CONFIG.defaults.caseNumberPrefix);
-  const [defaultJurisdiction, setJur] = React.useState<string>(APP_CONFIG.defaults.defaultJurisdiction);
   const [demoDataInstalled, setDemo] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [workspace, setWorkspace] = React.useState<WorkspaceInfo | null>(null);
@@ -56,7 +54,7 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
   async function finish() {
     setBusy(true);
     await platform().system.completeSetup({
-      organizationName, caseNumberPrefix, defaultJurisdiction, demoDataInstalled,
+      organizationName, caseNumberPrefix, demoDataInstalled,
     });
     setBusy(false);
     onDone?.();
@@ -96,11 +94,6 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Case number prefix">
               <GlassInput value={caseNumberPrefix} onChange={(e) => setPrefix(e.target.value)} />
-            </Field>
-            <Field label="Default jurisdiction">
-              <GlassSelect value={defaultJurisdiction} onChange={(e) => setJur(e.target.value)}>
-                {JURISDICTIONS.map((j) => <option key={j}>{j}</option>)}
-              </GlassSelect>
             </Field>
           </div>
           <label className="flex items-center gap-2 rounded-xl border border-line bg-[var(--pf-surface)] px-3 py-2.5 text-sm text-ink">

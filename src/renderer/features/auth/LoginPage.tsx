@@ -7,62 +7,12 @@ import { PASSWORD_MIN_LENGTH } from '@shared/password';
 import { GlassButton, GlassInput, GlassPanel, Field } from '../../components/glass';
 import privacyFlowIcon from '../../assets/privacyflow-icon.png';
 
-interface GitHubRelease {
+export interface AvailableRelease {
   tag_name: string;
   html_url: string;
-  draft?: boolean;
-  prerelease?: boolean;
 }
 
-function normalizeVersion(value: string): number[] {
-  return value
-    .trim()
-    .replace(/^v/i, '')
-    .split(/[.-]/)
-    .slice(0, 3)
-    .map((part) => {
-      const parsed = Number.parseInt(part.replace(/\D+.*/, ''), 10);
-      return Number.isFinite(parsed) ? parsed : 0;
-    });
-}
-
-function isNewerVersion(candidate: string, current: string): boolean {
-  const next = normalizeVersion(candidate);
-  const base = normalizeVersion(current);
-  for (let i = 0; i < Math.max(next.length, base.length); i += 1) {
-    const a = next[i] ?? 0;
-    const b = base[i] ?? 0;
-    if (a > b) return true;
-    if (a < b) return false;
-  }
-  return false;
-}
-
-async function fetchLatestPublishedRelease(): Promise<GitHubRelease | null> {
-  const headers = {
-    Accept: 'application/vnd.github+json',
-    'Cache-Control': 'no-cache',
-    Pragma: 'no-cache',
-  };
-  const latestRes = await fetch(`${APP_CONFIG.updates.latestReleaseUrl}?t=${Date.now()}`, {
-    cache: 'no-store',
-    headers,
-  });
-  if (latestRes.ok) {
-    const latest = await latestRes.json() as GitHubRelease;
-    if (latest.tag_name && !latest.draft) return latest;
-  }
-
-  const releasesRes = await fetch(`${APP_CONFIG.updates.releasesApiUrl}?per_page=10&t=${Date.now()}`, {
-    cache: 'no-store',
-    headers,
-  });
-  if (!releasesRes.ok) return null;
-  const releases = await releasesRes.json() as GitHubRelease[];
-  return releases.find((release) => release.tag_name && !release.draft && !release.prerelease) ?? null;
-}
-
-export function LoginPage() {
+export function LoginPage({ availableRelease }: { availableRelease: AvailableRelease | null }) {
   const {
     login, loading, error, user,
     pendingPasswordChange, completePasswordChange, cancelPasswordChange,
@@ -70,7 +20,6 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [username, setUsername] = React.useState('admin');
   const [password, setPassword] = React.useState('');
-  const [availableRelease, setAvailableRelease] = React.useState<GitHubRelease | null>(null);
 
   // First-login password change form
   const [currentPw, setCurrentPw] = React.useState('');
@@ -81,27 +30,6 @@ export function LoginPage() {
   React.useEffect(() => {
     if (user) navigate('/', { replace: true });
   }, [user, navigate]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const latest = await fetchLatestPublishedRelease();
-        if (
-          !cancelled &&
-          latest?.tag_name &&
-          isNewerVersion(latest.tag_name, APP_CONFIG.version)
-        ) {
-          setAvailableRelease(latest);
-        }
-      } catch {
-        // Sign-in must keep working if GitHub is unavailable.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

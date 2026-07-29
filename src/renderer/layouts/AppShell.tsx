@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import {
   LayoutDashboard, FolderKanban, ListChecks, BarChart3, Workflow,
   ShieldCheck, Settings, LogOut, Plus, Lock, RefreshCw, KeyRound, X,
-  ChevronDown, CalendarDays, PlusCircle,
+  ChevronDown, CalendarDays, PlusCircle, PackageCheck, ExternalLink,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { can, useAuth } from '../store/auth';
@@ -19,6 +19,7 @@ import {
   currentLockState, refreshLockState, recheckLock, claimStaleLock, workspaceBridge,
   type WorkspaceLockState,
 } from '../platform/workspace';
+import type { AvailableRelease } from '../features/auth/LoginPage';
 
 const NAV: {
   to: string;
@@ -359,7 +360,13 @@ function WorkspaceBanner({ state }: { state: WorkspaceLockState }) {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  availableRelease,
+}: {
+  children: React.ReactNode;
+  availableRelease: AvailableRelease | null;
+}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -455,6 +462,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="truncate text-[10px] text-muted">{holder.user} is editing</p>
             </div>
           </div>
+        )}
+
+        {availableRelease && (
+          <button
+            type="button"
+            onClick={() => window.open(availableRelease.html_url, '_blank', 'noopener,noreferrer')}
+            className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-left transition-colors hover:bg-amber-400/15 focus-ring"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <PackageCheck className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold text-amber-100">Update available</span>
+                <span className="block truncate text-[10px] text-amber-100/80">{availableRelease.tag_name}</span>
+              </span>
+            </span>
+            <ExternalLink className="h-3.5 w-3.5 shrink-0 text-amber-200" />
+          </button>
         )}
 
         <div className="mt-2 flex items-center gap-3 rounded-xl border border-line px-3 py-2.5">

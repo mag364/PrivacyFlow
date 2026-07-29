@@ -1338,24 +1338,12 @@ export function SettingsPage() {
       if (m365.mode === 'outlook') {
         const outlook = outlookBridge();
         if (outlook) {
-          try {
-            await outlook.openDraft({
-              accountEmail: m365.accountEmail,
-              to: m365.accountEmail,
-              subject: `PrivacyFlow Outlook test (${new Date().toLocaleString()})`,
-              body: 'This is a PrivacyFlow local Outlook connection test.',
-            });
-          } catch {
-            const bridge = mailBridge();
-            if (!bridge) throw new Error('Outlook automation is blocked and mailto fallback is unavailable.');
-            await bridge.openDraft({
-              to: m365.accountEmail,
-              subject: `PrivacyFlow Outlook draft test (${new Date().toLocaleString()})`,
-              body: 'This is a PrivacyFlow Outlook draft connection test.',
-            });
-            setM365TestResult(`Outlook automation was blocked, so PrivacyFlow opened a mailto draft to ${m365.accountEmail}.`);
-            return;
-          }
+          await outlook.openDraft({
+            accountEmail: m365.accountEmail,
+            to: m365.accountEmail,
+            subject: `PrivacyFlow Outlook test (${new Date().toLocaleString()})`,
+            body: 'This is a PrivacyFlow local Outlook connection test.',
+          });
         } else {
           const bridge = mailBridge();
           if (!bridge) throw new Error('Outlook draft bridge is unavailable.');

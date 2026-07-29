@@ -692,11 +692,16 @@ $outlook = New-Object -ComObject Outlook.Application
 $session = $outlook.Session
 $mail = $outlook.CreateItem(0)
 if ($input.accountEmail) {
+  $matchedAccount = $false
   foreach ($account in $session.Accounts) {
     if ([string]::Compare([string]$account.SmtpAddress, [string]$input.accountEmail, $true) -eq 0) {
       $mail.SendUsingAccount = $account
+      $matchedAccount = $true
       break
     }
+  }
+  if (-not $matchedAccount) {
+    $mail.SentOnBehalfOfName = [string]$input.accountEmail
   }
 }
 $mail.To = [string]$input.to

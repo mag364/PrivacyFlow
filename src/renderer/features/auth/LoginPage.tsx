@@ -11,6 +11,7 @@ interface GitHubRelease {
   tag_name: string;
   html_url: string;
   draft?: boolean;
+  prerelease?: boolean;
 }
 
 function normalizeVersion(value: string): number[] {
@@ -37,6 +38,30 @@ function isNewerVersion(candidate: string, current: string): boolean {
   return false;
 }
 
+async function fetchLatestPublishedRelease(): Promise<GitHubRelease | null> {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'Cache-Control': 'no-cache',
+    Pragma: 'no-cache',
+  };
+  const latestRes = await fetch(`${APP_CONFIG.updates.latestReleaseUrl}?t=${Date.now()}`, {
+    cache: 'no-store',
+    headers,
+  });
+  if (latestRes.ok) {
+    const latest = await latestRes.json() as GitHubRelease;
+    if (latest.tag_name && !latest.draft) return latest;
+  }
+
+  const releasesRes = await fetch(`${APP_CONFIG.updates.releasesApiUrl}?per_page=10&t=${Date.now()}`, {
+    cache: 'no-store',
+    headers,
+  });
+  if (!releasesRes.ok) return null;
+  const releases = await releasesRes.json() as GitHubRelease[];
+  return releases.find((release) => release.tag_name && !release.draft && !release.prerelease) ?? null;
+}
+
 export function LoginPage() {
   const {
     login, loading, error, user,
@@ -61,15 +86,10 @@ export function LoginPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(APP_CONFIG.updates.latestReleaseUrl, {
-          headers: { Accept: 'application/vnd.github+json' },
-        });
-        if (!res.ok) return;
-        const latest = await res.json() as GitHubRelease;
+        const latest = await fetchLatestPublishedRelease();
         if (
           !cancelled &&
-          latest.tag_name &&
-          !latest.draft &&
+          latest?.tag_name &&
           isNewerVersion(latest.tag_name, APP_CONFIG.version)
         ) {
           setAvailableRelease(latest);

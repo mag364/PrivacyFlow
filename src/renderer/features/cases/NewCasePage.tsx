@@ -217,15 +217,15 @@ export function NewCasePage() {
               <Field label="Standard Response Sent">
                 <GlassInput type="date" value={standardResponseSent} onChange={(e) => setStandardResponseSent(e.target.value)} />
               </Field>
-              <Field label="Original email" hint="Upload the requester email as .eml so replies and forwards can preserve the original message context.">
-                <input
-                  type="file"
-                  accept=".eml,message/rfc822"
-                  className="block w-full text-sm text-muted file:mr-3 file:rounded-capsule file:border file:border-line file:bg-[var(--pf-highlight)] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink hover:file:brightness-110"
-                  onChange={(e) => void handleSourceEmail(e.target.files?.[0] ?? null)}
-                />
-              </Field>
             </div>
+            <Field label="Original email" hint="Upload the requester email as .eml so replies and forwards can preserve the original message context.">
+              <input
+                type="file"
+                accept=".eml,message/rfc822"
+                className="block w-full text-sm text-muted file:mr-3 file:rounded-capsule file:border file:border-line file:bg-[var(--pf-highlight)] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink hover:file:brightness-110"
+                onChange={(e) => void handleSourceEmail(e.target.files?.[0] ?? null)}
+              />
+            </Field>
             {sourceEmail && (
               <div className="flex items-start gap-2 rounded-xl border border-line bg-[var(--pf-highlight)] px-3 py-2 text-xs text-muted">
                 <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />

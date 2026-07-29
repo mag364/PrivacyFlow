@@ -42,7 +42,7 @@ interface EditDraft {
   description: string;
   intakeChannel: string;
   // Requester
-  requestId: string;
+  dsrreqNumber: string;
   lastName: string;
   email: string;
   relationship: string;
@@ -82,7 +82,7 @@ export function CaseDetailPage() {
   const [saveBusy, setSaveBusy] = React.useState(false);
   const [saveError, setSaveError] = React.useState('');
 
-  // Case number (ServiceNow) editing
+  // Request ID editing
   const [editingNumber, setEditingNumber] = React.useState(false);
   const [numberDraft, setNumberDraft] = React.useState('');
   const [numberError, setNumberError] = React.useState('');
@@ -155,8 +155,7 @@ export function CaseDetailPage() {
       requestTypes: c!.requestTypes.map(String),
       description: c!.description,
       intakeChannel: String(c!.intakeChannel),
-      requestId:
-        c!.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c!.subject.firstName ?? '',
+      dsrreqNumber: c!.caseNumber,
       lastName: c!.subject.lastName,
       email: c!.subject.emails[0] ?? '',
       relationship: String(c!.subject.relationship),
@@ -178,15 +177,17 @@ export function CaseDetailPage() {
   async function saveEdit() {
     if (!draft) return;
     if (draft.requestTypes.length === 0) { setSaveError('Select at least one request type.'); return; }
-    if (!draft.requestId.trim()) { setSaveError('Request ID is required.'); return; }
+    if (!draft.dsrreqNumber.trim()) { setSaveError('DSRREQ # is required.'); return; }
     if (!draft.lastName.trim()) { setSaveError('Last name is required.'); return; }
     if (!draft.email.trim() || !/.+@.+\..+/.test(draft.email)) { setSaveError('A valid email is required.'); return; }
     if (!draft.description.trim()) { setSaveError('Description is required.'); return; }
     setSaveBusy(true);
     setSaveError('');
     try {
-      const identifiers = c!.subject.identifiers.filter((i) => i.label !== 'Request ID');
-      identifiers.unshift({ label: 'Request ID', value: draft.requestId.trim() });
+      const dsrreqNumber = draft.dsrreqNumber.trim();
+      if (dsrreqNumber !== c!.caseNumber) {
+        await platform().cases.updateCaseNumber(id, dsrreqNumber);
+      }
       await platform().cases.update(id, {
         requestTypes: draft.requestTypes,
         description: draft.description,
@@ -198,7 +199,7 @@ export function CaseDetailPage() {
           relationship: draft.relationship,
           minor: draft.minor,
           authorizedAgent: draft.authorizedAgent,
-          identifiers,
+          identifiers: c!.subject.identifiers,
           clientCenterStatus: draft.clientCenterStatus || undefined,
           emailedFA: draft.emailedFA || undefined,
         },
@@ -242,17 +243,30 @@ export function CaseDetailPage() {
   async function saveCaseNumber() {
     const trimmed = numberDraft.trim();
     if (!trimmed) {
-      setNumberError('Request number cannot be empty.');
+      setNumberError('Request ID cannot be empty.');
       return;
     }
     setNumberBusy(true);
     setNumberError('');
     try {
-      await platform().cases.updateCaseNumber(id, trimmed);
+      const duplicate = (await platform().cases.list()).find((x) => {
+        if (x.id === id) return false;
+        const value = x.subject.identifiers.find((i) => i.label === 'Request ID')?.value;
+        return value?.toLowerCase() === trimmed.toLowerCase();
+      });
+      if (duplicate) throw new Error(`"${trimmed}" is already used by another request.`);
+      const identifiers = c!.subject.identifiers.filter((i) => i.label !== 'Request ID');
+      identifiers.unshift({ label: 'Request ID', value: trimmed });
+      await platform().cases.update(id, {
+        subject: {
+          ...c!.subject,
+          identifiers,
+        },
+      });
       setEditingNumber(false);
       await load();
     } catch (e) {
-      setNumberError(e instanceof Error ? e.message : 'Unable to update the request number.');
+      setNumberError(e instanceof Error ? e.message : 'Unable to update the Request ID.');
     } finally {
       setNumberBusy(false);
     }
@@ -357,16 +371,16 @@ export function CaseDetailPage() {
               </div>
               {numberError
                 ? <p className="text-xs text-red-400">{numberError}</p>
-                : <p className="text-xs text-muted">Enter the number assigned by ServiceNow.</p>}
+                : <p className="text-xs text-muted">Enter the PH Request ID.</p>}
             </div>
           ) : (
             <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">
-              {c.caseNumber}
+              {requestIdValue}
               {canEdit && (
                 <button
-                  onClick={() => { setNumberDraft(c.caseNumber); setNumberError(''); setEditingNumber(true); }}
+                  onClick={() => { setNumberDraft(requestIdValue === '—' ? '' : requestIdValue); setNumberError(''); setEditingNumber(true); }}
                   className="rounded-lg p-1.5 text-muted hover:bg-[var(--pf-highlight)] hover:text-ink focus-ring"
-                  title="Edit request number (e.g. the number ServiceNow assigns)"
+                  title="Edit Request ID"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -490,8 +504,8 @@ export function CaseDetailPage() {
                     <h3 className="mb-3 text-sm font-semibold text-ink">Requester</h3>
                     <div className="flex flex-col gap-3">
                       <div className="grid grid-cols-2 gap-3">
-                        <Field label="Request ID">
-                          <GlassInput value={draft.requestId} onChange={(e) => setD({ requestId: e.target.value })} />
+                        <Field label="DSRREQ #">
+                          <GlassInput value={draft.dsrreqNumber} onChange={(e) => setD({ dsrreqNumber: e.target.value })} />
                         </Field>
                         <Field label="Last name">
                           <GlassInput value={draft.lastName} onChange={(e) => setD({ lastName: e.target.value })} />
@@ -809,7 +823,7 @@ export function CaseDetailPage() {
             <p className="text-sm font-medium text-ink">{c.subject.lastName}</p>
             <p className="mb-3 text-xs text-muted">{c.subject.relationship}{c.subject.minor ? ' · Minor' : ''}{c.subject.authorizedAgent ? ' · Agent' : ''}</p>
             <div className="flex flex-col gap-1.5 text-sm text-muted">
-              <span className="flex items-center gap-2">ID: <span className="text-ink">{requestIdValue}</span></span>
+              <span className="flex items-center gap-2">DSRREQ #: <span className="text-ink">{c.caseNumber}</span></span>
               {c.subject.emails.map((e) => <span key={e} className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /> {e}</span>)}
               {c.subject.clientCenterStatus && (
                 <span className="flex items-center gap-2">Client Center: <GlassBadge tone={c.subject.clientCenterStatus === 'Located' ? 'success' : 'warn'}>{c.subject.clientCenterStatus}</GlassBadge></span>

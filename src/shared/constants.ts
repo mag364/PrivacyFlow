@@ -56,7 +56,7 @@ export const REQUEST_TYPES = [
   'Deletion',
   'Correction',
   'Unsubscribe',
-  'Do Not Sale',
+  'Do Not Sell',
 ] as const;
 export type RequestType = (typeof REQUEST_TYPES)[number];
 

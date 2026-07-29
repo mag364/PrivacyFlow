@@ -433,6 +433,18 @@ function migrateRequesterFirstNameTemplates(d: Db): boolean {
   return changed;
 }
 
+function migrateRequestTypeNames(d: Db): boolean {
+  let changed = false;
+  for (const c of d.cases) {
+    const nextTypes = c.requestTypes.map((type) => (String(type) === 'Do Not Sale' ? 'Do Not Sell' : type));
+    if (nextTypes.some((type, index) => type !== c.requestTypes[index])) {
+      c.requestTypes = nextTypes as typeof c.requestTypes;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 let cache: Db | null = null;
 
 function load(): Db | null {
@@ -456,7 +468,8 @@ function load(): Db | null {
     if (!s.m365 || typeof s.m365.connected !== 'boolean') s.m365 = d.m365;
     const workflowMigrated = migrateWorkflow(cache);
     const templateMigrated = migrateRequesterFirstNameTemplates(cache);
-    const migrated = workflowMigrated || templateMigrated;
+    const requestTypeMigrated = migrateRequestTypeNames(cache);
+    const migrated = workflowMigrated || templateMigrated || requestTypeMigrated;
     if (migrated && !isReadOnly()) save(cache);
     return cache;
   } catch {
@@ -562,7 +575,7 @@ function computeMetrics(d: Db): DashboardMetrics {
     deletionCount: openWithType('Deletion'),
     correctionCount: openWithType('Correction'),
     unsubscribeCount: openWithType('Unsubscribe'),
-    doNotSaleCount: openWithType('Do Not Sale'),
+    doNotSaleCount: openWithType('Do Not Sell'),
     receivedThisMonth,
     closedThisMonth: completedThisMonth,
   };

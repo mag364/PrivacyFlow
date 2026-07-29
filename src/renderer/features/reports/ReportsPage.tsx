@@ -53,7 +53,7 @@ export function ReportsPage() {
     ['Open requests', m.openCases],
     ['Deletion', m.deletionCount],
     ['Unsubscribe', m.unsubscribeCount],
-    ['Do Not Sale', m.doNotSaleCount],
+    ['Do Not Sell', m.doNotSaleCount],
   ] as const;
 
   const projectKpis = [

@@ -92,7 +92,7 @@ export function SetupPage({ onDone }: { onDone?: () => void }) {
             <GlassInput value={organizationName} onChange={(e) => setOrg(e.target.value)} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Case number prefix">
+            <Field label="Request ID prefix">
               <GlassInput value={caseNumberPrefix} onChange={(e) => setPrefix(e.target.value)} />
             </Field>
           </div>

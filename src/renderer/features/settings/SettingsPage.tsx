@@ -1040,7 +1040,7 @@ export function SettingsPage() {
               <GlassInput disabled={!editable} value={settings.organizationName} onChange={(e) => setSettings({ ...settings, organizationName: e.target.value })} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Case number prefix">
+              <Field label="Request ID prefix">
                 <GlassInput disabled={!editable} value={settings.caseNumberPrefix} onChange={(e) => setSettings({ ...settings, caseNumberPrefix: e.target.value })} />
               </Field>
               <Field label="Auto-lock (minutes)">
@@ -1226,9 +1226,9 @@ export function SettingsPage() {
           )}
 
           {addingUser && canManageUsers && (
-            <form onSubmit={createUser} className="mb-4 flex max-w-2xl flex-col gap-3 rounded-xl border border-accent/40 bg-[var(--pf-surface)] p-4">
+            <form onSubmit={createUser} className="mb-4 flex w-full flex-col gap-3 rounded-xl border border-accent/40 bg-[var(--pf-surface)] p-4">
               <p className="text-sm font-semibold text-ink">Add a new user</p>
-              <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <Field label="Full name">
                   <GlassInput value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Jordan Reyes" autoFocus />
                 </Field>

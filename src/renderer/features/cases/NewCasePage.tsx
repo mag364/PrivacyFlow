@@ -15,6 +15,7 @@ export function NewCasePage() {
   const { user } = useAuth();
   const [busy, setBusy] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [requestIdPrefix, setRequestIdPrefix] = React.useState('');
 
   const [requestId, setRequestId] = React.useState('');
   const [lastName, setLastName] = React.useState('');
@@ -33,6 +34,10 @@ export function NewCasePage() {
   const [forwardedToRon, setForwardedToRon] = React.useState('');
   const [description, setDescription] = React.useState('');
 
+  React.useEffect(() => {
+    platform().system.settings().then((settings) => setRequestIdPrefix(settings.caseNumberPrefix));
+  }, []);
+
   if (!can(user?.role, 'cases.create')) {
     return (
       <GlassPanel><p className="text-sm text-muted">You do not have permission to create requests.</p></GlassPanel>
@@ -46,6 +51,9 @@ export function NewCasePage() {
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (!requestId.trim()) e.requestId = 'Required';
+    else if (requestIdPrefix && !requestId.trim().startsWith(requestIdPrefix)) {
+      e.requestId = `Must start with ${requestIdPrefix}`;
+    }
     if (!lastName.trim()) e.lastName = 'Required';
     if (!email.trim() || !/.+@.+\..+/.test(email)) e.email = 'Valid email required';
     if (requestTypes.length === 0) e.requestTypes = 'Select at least one request type';
@@ -60,6 +68,7 @@ export function NewCasePage() {
     setBusy(true);
     const input: NewCaseInput = {
       requestTypes,
+      caseNumberOverride: requestId.trim(),
       intakeChannel,
       jurisdiction: 'US',
       priority: 'Medium',
@@ -102,7 +111,11 @@ export function NewCasePage() {
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Request ID" error={errors.requestId}>
-                <GlassInput value={requestId} onChange={(e) => setRequestId(e.target.value)} placeholder="e.g. REQ-1042" />
+                <GlassInput
+                  value={requestId}
+                  onChange={(e) => setRequestId(e.target.value)}
+                  placeholder={requestIdPrefix ? `e.g. ${requestIdPrefix}0000001` : 'e.g. REQ-1042'}
+                />
               </Field>
               <Field label="Last name" error={errors.lastName}>
                 <GlassInput value={lastName} onChange={(e) => setLastName(e.target.value)} />

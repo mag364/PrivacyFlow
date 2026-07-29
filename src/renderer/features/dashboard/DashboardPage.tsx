@@ -82,7 +82,7 @@ export function DashboardPage() {
         <Metric icon={<FolderOpen className="h-4 w-4" />} label="Open requests" value={metrics.openCases} tone="info" />
         <Metric icon={<Trash2 className="h-4 w-4" />} label="Deletions" value={metrics.deletionCount} tone="danger" />
         <Metric icon={<BellOff className="h-4 w-4" />} label="Unsubscribe" value={metrics.unsubscribeCount} tone="warn" />
-        <Metric icon={<Ban className="h-4 w-4" />} label="Do Not Sale" value={metrics.doNotSaleCount} tone="danger" />
+        <Metric icon={<Ban className="h-4 w-4" />} label="Do Not Sell" value={metrics.doNotSaleCount} tone="danger" />
         <Metric icon={<PenLine className="h-4 w-4" />} label="Corrections" value={metrics.correctionCount} tone="warn" />
         <Metric icon={<Eye className="h-4 w-4" />} label="Access" value={metrics.accessCount} tone="info" />
         <Metric icon={<Inbox className="h-4 w-4" />} label="Received this month" value={metrics.receivedThisMonth} tone="info" />

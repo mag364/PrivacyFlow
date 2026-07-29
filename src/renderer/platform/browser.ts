@@ -801,7 +801,7 @@ async function addImportedCase(
     : now;
   const rule = ruleFor(d.settings, String(input.jurisdiction));
   const due = computeDueDate(received, { periodDays: rule.periodDays, businessDays: rule.businessDays });
-  const caseNumber = input.caseNumberOverride?.trim() || nextCaseNumber(d);
+  const caseNumber = input.caseNumberOverride?.trim() || (input.skipCaseNumberAutoAssign ? '' : nextCaseNumber(d));
   const c: DsrCase = {
     id: uid(),
     caseNumber,
@@ -1287,7 +1287,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           periodDays: rule.periodDays,
         };
         const actor = actorOf(d);
-        const caseNumber = input.caseNumberOverride?.trim() || nextCaseNumber(d);
+        const caseNumber = input.caseNumberOverride?.trim() || (input.skipCaseNumberAutoAssign ? '' : nextCaseNumber(d));
         const c: DsrCase = {
           id: uid(),
           caseNumber,
@@ -1418,11 +1418,12 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         const c = d.cases.find((x) => x.id === id);
         if (!c) throw new Error('Case not found');
         const trimmed = caseNumber.trim();
-        if (!trimmed) throw new Error('Request number cannot be empty.');
-        const duplicate = d.cases.find(
-          (x) => x.id !== id && x.caseNumber.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (duplicate) throw new Error(`"${trimmed}" is already used by another request.`);
+        if (trimmed) {
+          const duplicate = d.cases.find(
+            (x) => x.id !== id && x.caseNumber.toLowerCase() === trimmed.toLowerCase(),
+          );
+          if (duplicate) throw new Error(`"${trimmed}" is already used by another request.`);
+        }
         if (trimmed === c.caseNumber) return clone(c);
         const previous = c.caseNumber;
         c.caseNumber = trimmed;

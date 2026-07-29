@@ -177,7 +177,6 @@ export function CaseDetailPage() {
   async function saveEdit() {
     if (!draft) return;
     if (draft.requestTypes.length === 0) { setSaveError('Select at least one request type.'); return; }
-    if (!draft.dsrreqNumber.trim()) { setSaveError('DSRREQ # is required.'); return; }
     if (!draft.lastName.trim()) { setSaveError('Last name is required.'); return; }
     if (!draft.email.trim() || !/.+@.+\..+/.test(draft.email)) { setSaveError('A valid email is required.'); return; }
     if (!draft.description.trim()) { setSaveError('Description is required.'); return; }

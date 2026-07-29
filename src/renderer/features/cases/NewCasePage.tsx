@@ -55,8 +55,7 @@ export function NewCasePage() {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!requestId.trim()) e.requestId = 'Required';
-    else if (requestIdPrefix && !requestId.trim().startsWith(requestIdPrefix)) {
+    if (requestId.trim() && requestIdPrefix && !requestId.trim().startsWith(requestIdPrefix)) {
       e.requestId = `Must start with ${requestIdPrefix}`;
     }
     if (!lastName.trim()) e.lastName = 'Required';
@@ -96,6 +95,7 @@ export function NewCasePage() {
     const input: NewCaseInput = {
       requestTypes,
       caseNumberOverride: dsrreqNumber.trim() || undefined,
+      skipCaseNumberAutoAssign: !dsrreqNumber.trim(),
       intakeChannel,
       jurisdiction: 'US',
       priority: 'Medium',
@@ -109,7 +109,7 @@ export function NewCasePage() {
         relationship,
         minor,
         authorizedAgent,
-        identifiers: [{ label: 'Request ID', value: requestId }],
+        identifiers: requestId.trim() ? [{ label: 'Request ID', value: requestId.trim() }] : [],
         clientCenterStatus,
         emailedFA: emailedFA || undefined,
       },
@@ -209,7 +209,7 @@ export function NewCasePage() {
                 <GlassInput
                   value={dsrreqNumber}
                   onChange={(e) => setDsrreqNumber(e.target.value)}
-                  placeholder="Auto-assigned"
+                  placeholder="Optional"
                 />
               </Field>
             </div>

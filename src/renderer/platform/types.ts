@@ -45,6 +45,7 @@ export interface NewCaseInput {
   businessUnit?: string;
   description: string;
   caseNumberOverride?: string;
+  skipCaseNumberAutoAssign?: boolean;
   ownerId?: string;
   subject: DataSubject;
   intakeDates?: IntakeDates;

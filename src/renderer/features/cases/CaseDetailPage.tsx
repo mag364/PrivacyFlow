@@ -20,7 +20,7 @@ import {
 } from '../../components/glass';
 import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { useAuth, can } from '../../store/auth';
-import { sourceEmailFromFile, sourceEmailSummary } from '../../lib/emailSource';
+import { isSupportedSourceEmailFile, sourceEmailFromFile, sourceEmailSummary } from '../../lib/emailSource';
 
 type TabKey = 'overview' | 'documents' | 'communications' | 'notes' | 'audit';
 
@@ -297,7 +297,7 @@ export function CaseDetailPage() {
     setCommBusy(true);
     setCommError('');
     try {
-      const parsedEmail = commSourceEmail ?? (commFile && /\.eml$/i.test(commFile.name) ? await sourceEmailFromFile(commFile) : null);
+      const parsedEmail = commSourceEmail ?? (commFile && isSupportedSourceEmailFile(commFile) ? await sourceEmailFromFile(commFile) : null);
       await platform().cases.addCommunication(id, {
         subject: parsedEmail?.subject || subject,
         summary: commSummary.trim() || (parsedEmail ? sourceEmailSummary(parsedEmail) : `Attached file: ${subject}${commFile ? ` (${(commFile.size / 1024).toFixed(0)} KB)` : ''}`),
@@ -631,16 +631,17 @@ export function CaseDetailPage() {
               {addingComm && canEdit && (
                 <form onSubmit={submitCommunication} className="mb-4 flex flex-col gap-3 rounded-xl border border-accent/40 bg-[var(--pf-surface)] p-4">
                   <p className="text-sm font-semibold text-ink">Add a file</p>
-                  <Field label="File" hint="Pick a file from your computer, or just enter a subject below to log a reference.">
+                  <Field label="File" hint="Pick a file from your computer, including Outlook .msg or .eml email files, or enter a subject below to log a reference.">
                     <input
                       type="file"
+                      accept=".msg,.eml,application/vnd.ms-outlook,message/rfc822"
                       className="block w-full text-sm text-muted file:mr-3 file:rounded-capsule file:border file:border-line file:bg-[var(--pf-highlight)] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink hover:file:brightness-110"
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null;
                         setCommFile(f);
                         setCommSourceEmail(null);
                         if (f && !commSubject) setCommSubject(f.name);
-                        if (f && /\.eml$/i.test(f.name)) {
+                        if (f && isSupportedSourceEmailFile(f)) {
                           void sourceEmailFromFile(f)
                             .then((parsed) => {
                               setCommSourceEmail(parsed);

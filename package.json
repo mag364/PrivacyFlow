@@ -1,7 +1,7 @@
 {
   "name": "privacyflow",
   "private": true,
-  "version": "1.0.30",
+  "version": "1.0.31",
   "type": "module",
   "main": "build/electron/main.js",
   "author": {
@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",
+    "@kenjiuno/msgreader": "^1.28.0",
     "@tanstack/react-table": "8.20.5",
     "clsx": "2.1.1",
     "date-fns": "3.6.0",

@@ -10,7 +10,7 @@ import type { SourceEmail } from '@shared/types';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
-import { sourceEmailFromFile } from '../../lib/emailSource';
+import { isSupportedSourceEmailFile, sourceEmailFromFile } from '../../lib/emailSource';
 
 export function NewCasePage() {
   const navigate = useNavigate();
@@ -70,8 +70,8 @@ export function NewCasePage() {
     setSourceEmailError('');
     setSourceEmail(null);
     if (!file) return;
-    if (!/\.eml$/i.test(file.name)) {
-      setSourceEmailError('Upload an .eml email file. Outlook .msg files can be saved as .eml from Outlook before upload.');
+    if (!isSupportedSourceEmailFile(file)) {
+      setSourceEmailError('Upload an Outlook .msg file or an .eml email file.');
       return;
     }
     try {
@@ -217,11 +217,14 @@ export function NewCasePage() {
               <Field label="Standard Response Sent">
                 <GlassInput type="date" value={standardResponseSent} onChange={(e) => setStandardResponseSent(e.target.value)} />
               </Field>
+              <Field label="Forwarded email to Ron K. (optional)">
+                <GlassInput type="date" value={forwardedToRon} onChange={(e) => setForwardedToRon(e.target.value)} />
+              </Field>
             </div>
-            <Field label="Original email" hint="Upload the requester email as .eml so replies and forwards can preserve the original message context.">
+            <Field label="Original email" hint="Upload the requester email as an Outlook .msg or .eml file so replies and forwards can preserve the original message context.">
               <input
                 type="file"
-                accept=".eml,message/rfc822"
+                accept=".msg,.eml,application/vnd.ms-outlook,message/rfc822"
                 className="block w-full text-sm text-muted file:mr-3 file:rounded-capsule file:border file:border-line file:bg-[var(--pf-highlight)] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink hover:file:brightness-110"
                 onChange={(e) => void handleSourceEmail(e.target.files?.[0] ?? null)}
               />
@@ -236,11 +239,6 @@ export function NewCasePage() {
               </div>
             )}
             {sourceEmailError && <p className="text-xs text-red-400">{sourceEmailError}</p>}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Forwarded email to Ron K. (optional)">
-                <GlassInput type="date" value={forwardedToRon} onChange={(e) => setForwardedToRon(e.target.value)} />
-              </Field>
-            </div>
           </div>
         </GlassPanel>
 

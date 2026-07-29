@@ -98,7 +98,45 @@ function extractBody(rawBody: string, headers: string[]): string {
   return contentType.toLowerCase().includes('text/html') ? htmlToText(decoded) : decoded.trim();
 }
 
-export async function sourceEmailFromFile(file: File): Promise<SourceEmail> {
+function firstSmtpAddress(value?: string): string | undefined {
+  return value?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+}
+
+async function sourceEmailFromMsgFile(file: File): Promise<SourceEmail> {
+  const { default: MsgReader } = await import('@kenjiuno/msgreader');
+  const msg = new MsgReader(await file.arrayBuffer());
+  const parsed = msg.getFileData();
+  if (parsed.error) throw new Error(parsed.error);
+
+  const headerLines = parsed.headers ? unfoldHeaders(parsed.headers) : [];
+  const fromHeader = parseAddress(headerValue(headerLines, 'From'));
+  const senderName = parsed.senderName || fromHeader.name;
+  const senderEmail = firstSmtpAddress(parsed.senderEmail) ?? fromHeader.email;
+  const to = headerValue(headerLines, 'To')
+    || (parsed.recipients ?? [])
+      .map((recipient) => recipient.email || recipient.name)
+      .filter(Boolean)
+      .join('; ');
+  const subject = parsed.subject || decodeMimeWords(headerValue(headerLines, 'Subject')) || file.name;
+  const date = headerValue(headerLines, 'Date')
+    || parsed.clientSubmitTime
+    || parsed.messageDeliveryTime
+    || parsed.creationTime
+    || undefined;
+
+  return {
+    filename: file.name,
+    fromName: senderName || undefined,
+    fromEmail: senderEmail,
+    to: decodeMimeWords(to),
+    subject,
+    date,
+    bodyText: (parsed.body || '').trim(),
+    rawSizeBytes: file.size,
+  };
+}
+
+async function sourceEmailFromEmlFile(file: File): Promise<SourceEmail> {
   const raw = await file.text();
   const [headerText, ...bodyParts] = raw.split(/\r?\n\r?\n/);
   const headers = unfoldHeaders(headerText);
@@ -114,6 +152,16 @@ export async function sourceEmailFromFile(file: File): Promise<SourceEmail> {
     bodyText: extractBody(bodyParts.join('\n\n'), headers),
     rawSizeBytes: file.size,
   };
+}
+
+export function isSupportedSourceEmailFile(file: File): boolean {
+  return /\.(eml|msg)$/i.test(file.name);
+}
+
+export async function sourceEmailFromFile(file: File): Promise<SourceEmail> {
+  if (/\.msg$/i.test(file.name)) return sourceEmailFromMsgFile(file);
+  if (/\.eml$/i.test(file.name)) return sourceEmailFromEmlFile(file);
+  throw new Error('Upload an Outlook .msg file or an .eml email file.');
 }
 
 export function sourceEmailSummary(email: SourceEmail): string {

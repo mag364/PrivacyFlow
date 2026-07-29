@@ -1,4 +1,4 @@
-import { addDays, differenceInCalendarDays, isSameMonth, parseISO } from 'date-fns';
+import { addDays, isSameMonth, parseISO } from 'date-fns';
 import type {
   DsrCase, AuditEvent, IntegrityReport, OrgSettings, CaseNote, SlaInfo, Project, SlaRule,
   EmailTemplate, AutomationRule, AutomationTrigger, User, CaseDocument, Communication,
@@ -6,7 +6,7 @@ import type {
 import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
-import { computeDueDate, slaSnapshot } from '@shared/sla';
+import { computeDueDate } from '@shared/sla';
 import { verifyChain } from '@shared/audit';
 import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared/password';
 import type {
@@ -534,37 +534,11 @@ async function verifyCredentials(d: Db, username: string, password: string): Pro
 function computeMetrics(d: Db): DashboardMetrics {
   const now = new Date();
   const open = d.cases.filter((c) => OPEN_STATUSES.includes(c.status));
-  const threshold = d.settings.dueSoonThresholdDays ?? 5;
-
-  const snap = (c: DsrCase) =>
-    slaSnapshot({
-      received: c.sla.receivedDate,
-      currentDue: c.sla.currentDueDate,
-      paused: !!c.sla.currentPauseReason,
-      closed: !OPEN_STATUSES.includes(c.status),
-      dueSoonThreshold: threshold,
-    });
-
-  const overdue = open.filter((c) => snap(c).health === 'overdue').length;
-  const dueSoon = open.filter((c) => snap(c).health === 'due-soon').length;
-  const paused = open.filter((c) => snap(c).health === 'paused').length;
 
   const closed = d.cases.filter((c) => !OPEN_STATUSES.includes(c.status));
   const completedThisMonth = closed.filter(
     (c) => c.sla.closureDate && isSameMonth(parseISO(c.sla.closureDate), now),
   ).length;
-
-  const durations = closed
-    .filter((c) => c.sla.closureDate)
-    .map((c) => differenceInCalendarDays(parseISO(c.sla.closureDate!), parseISO(c.sla.receivedDate)));
-  const avgCompletionDays = durations.length
-    ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-    : 0;
-
-  const onTimeCount = closed.filter(
-    (c) => c.sla.closureDate && parseISO(c.sla.closureDate) <= parseISO(c.sla.currentDueDate),
-  ).length;
-  const onTimeRate = closed.length ? Math.round((onTimeCount / closed.length) * 100) : 100;
 
   const tally = (items: string[]): NameValue[] => {
     const m = new Map<string, number>();
@@ -582,22 +556,10 @@ function computeMetrics(d: Db): DashboardMetrics {
   return {
     openCases: open.length,
     newCases: d.cases.filter((c) => c.status === 'New').length,
-    awaitingVerification: 0,
-    dueSoon,
-    overdue,
-    paused,
-    unassigned: open.filter((c) => !c.ownerId).length,
-    highRisk: open.filter((c) => c.risk === 'High' || c.risk === 'Critical').length,
     completedThisMonth,
-    avgCompletionDays,
-    onTimeRate,
     byType: tally(d.cases.flatMap((c) => c.requestTypes.map(String))),
     byJurisdiction: tally(d.cases.map((c) => String(c.jurisdiction))),
     byStatus: tally(d.cases.map((c) => c.status)),
-    byAnalyst: tally(open.map((c) => {
-      const u = d.users.find((x) => x.id === c.ownerId);
-      return u ? u.name : 'Unassigned';
-    })),
     accessCount: openWithType('Access'),
     deletionCount: openWithType('Deletion'),
     correctionCount: openWithType('Correction'),

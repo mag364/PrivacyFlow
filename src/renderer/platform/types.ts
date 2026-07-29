@@ -22,19 +22,10 @@ export interface NameValue {
 export interface DashboardMetrics {
   openCases: number;
   newCases: number;
-  awaitingVerification: number;
-  dueSoon: number;
-  overdue: number;
-  paused: number;
-  unassigned: number;
-  highRisk: number;
   completedThisMonth: number;
-  avgCompletionDays: number;
-  onTimeRate: number;
   byType: NameValue[];
   byJurisdiction: NameValue[];
   byStatus: NameValue[];
-  byAnalyst: NameValue[];
   accessCount: number;
   deletionCount: number;
   correctionCount: number;

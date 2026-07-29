@@ -1,5 +1,4 @@
 import { format, formatDistanceToNowStrict, parseISO } from 'date-fns';
-import type { SlaHealth } from '@shared/sla';
 
 // -----------------------------------------------------------------------------
 // Presentation helpers: date formatting and tone mapping for badges.
@@ -49,26 +48,6 @@ export function riskTone(risk: string): Tone {
     case 'High': return 'warn';
     case 'Medium': return 'info';
     default: return 'neutral';
-  }
-}
-
-export function healthTone(health: SlaHealth): Tone {
-  switch (health) {
-    case 'overdue': return 'danger';
-    case 'due-soon': return 'warn';
-    case 'paused': return 'info';
-    case 'closed': return 'neutral';
-    default: return 'success';
-  }
-}
-
-export function healthLabel(health: SlaHealth): string {
-  switch (health) {
-    case 'overdue': return 'Overdue';
-    case 'due-soon': return 'Due soon';
-    case 'paused': return 'Paused';
-    case 'closed': return 'Closed';
-    default: return 'On track';
   }
 }
 

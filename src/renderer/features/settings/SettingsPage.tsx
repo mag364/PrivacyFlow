@@ -815,7 +815,7 @@ export function SettingsPage() {
   async function deleteUser(target: User) {
     if (!window.confirm(
       `Delete ${target.name} (@${target.username})? Their account is removed permanently. ` +
-      'Requests they owned become unassigned; past activity stays in the audit trail.',
+      'Their account is removed permanently; past activity stays in the audit trail.',
     )) return;
     setUserError('');
     try {

@@ -16,7 +16,6 @@ import { NewProjectPage } from './features/projects/NewProjectPage';
 import { ProjectDetailPage } from './features/projects/ProjectDetailPage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { AutomationPage } from './features/automation/AutomationPage';
-import { NotificationsPage } from './features/notifications/NotificationsPage';
 import { AuditPage } from './features/audit/AuditPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 
@@ -41,7 +40,6 @@ function Protected() {
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/automation" element={<AutomationPage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

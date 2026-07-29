@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import {
   LayoutDashboard, FolderKanban, ListChecks, BarChart3, Workflow,
-  Bell, ShieldCheck, Settings, LogOut, Plus, Lock, RefreshCw, KeyRound, X,
+  ShieldCheck, Settings, LogOut, Plus, Lock, RefreshCw, KeyRound, X,
   ChevronDown, CalendarDays, PlusCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -23,7 +23,6 @@ const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/automation', label: 'Automation', icon: Workflow },
-  { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/audit', label: 'Audit', icon: ShieldCheck },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];

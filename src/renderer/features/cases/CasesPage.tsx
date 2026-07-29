@@ -20,7 +20,7 @@ export function CasesPage() {
   const [q, setQ] = React.useState('');
   const [status, setStatus] = React.useState<StatusFilter>('open');
   const [type, setType] = React.useState<string>('all');
-  const [sort, setSort] = React.useState<'due' | 'recent' | 'priority'>('recent');
+  const [sort, setSort] = React.useState<'due' | 'recent'>('recent');
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -37,8 +37,6 @@ export function CasesPage() {
     platform().cases.list().then(setCases);
   }, [year]);
   if (!cases) return <Spinner label="Loading requests…" />;
-
-  const priorityRank: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
 
   const yearCases = year
     ? cases.filter((c) => new Date(c.sla.receivedDate).getFullYear() === year)
@@ -59,7 +57,6 @@ export function CasesPage() {
 
   rows = [...rows].sort((a, b) => {
     if (sort === 'recent') return b.lastActivityAt.localeCompare(a.lastActivityAt);
-    if (sort === 'priority') return (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
     return a.sla.currentDueDate.localeCompare(b.sla.currentDueDate);
   });
 
@@ -160,7 +157,6 @@ export function CasesPage() {
         <GlassSelect className="w-40" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
           <option value="recent">Sort: Recent</option>
           <option value="due">Sort: Due date</option>
-          <option value="priority">Sort: Priority</option>
         </GlassSelect>
       </div>
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Mail, Zap, Clock, Bell, PauseCircle, ArrowUpCircle, Save, Check, Plus, X, Trash2, Pencil,
+  Mail, Zap, Clock, PauseCircle, Save, Check, Plus, Trash2, Pencil,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type { OrgSettings, SlaRule, EmailTemplate, AutomationRule } from '@shared/types';
@@ -51,7 +51,6 @@ export function AutomationPage() {
   const { user } = useAuth();
   const [settings, setSettings] = React.useState<OrgSettings | null>(null);
   const [saved, setSaved] = React.useState(false);
-  const [newCadence, setNewCadence] = React.useState('');
   const [tab, setTab] = React.useState<Tab>('emails');
   const [editingTemplate, setEditingTemplate] = React.useState<EmailTemplate | null>(null);
 
@@ -71,16 +70,6 @@ export function AutomationPage() {
   function updateRule(jurisdiction: string, p: Partial<SlaRule>) {
     patch({ slaRules: settings!.slaRules.map((r) => r.jurisdiction === jurisdiction ? { ...r, ...p } : r) });
   }
-  function addCadence() {
-    const n = parseInt(newCadence, 10);
-    if (!Number.isFinite(n) || n <= 0 || settings!.reminderCadenceDays.includes(n)) { setNewCadence(''); return; }
-    patch({ reminderCadenceDays: [...settings!.reminderCadenceDays, n].sort((a, b) => b - a) });
-    setNewCadence('');
-  }
-  function removeCadence(d: number) {
-    patch({ reminderCadenceDays: settings!.reminderCadenceDays.filter((x) => x !== d) });
-  }
-
   // ---- Template helpers ----
   function saveTemplate(t: EmailTemplate) {
     const list = settings!.emailTemplates;
@@ -116,10 +105,7 @@ export function AutomationPage() {
   async function save() {
     const s = await platform().system.updateSettings({
       slaRules: settings!.slaRules,
-      reminderCadenceDays: settings!.reminderCadenceDays,
-      dueSoonThresholdDays: settings!.dueSoonThresholdDays,
       autoPauseSla: settings!.autoPauseSla,
-      escalationAlerts: settings!.escalationAlerts,
       emailTemplates: settings!.emailTemplates,
       automationRules: settings!.automationRules,
     });
@@ -422,49 +408,6 @@ export function AutomationPage() {
 
           <div className="flex flex-col gap-4">
             <GlassPanel>
-              <div className="mb-3 flex items-center gap-2">
-                <Bell className="h-4 w-4 text-accent" />
-                <h3 className="text-sm font-semibold text-ink">Reminder cadence</h3>
-              </div>
-              <p className="mb-3 text-sm text-muted">
-                Days before a request falls due at which owners should be reminded. Shown on the Notifications tab.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                {settings.reminderCadenceDays.map((d) => (
-                  <GlassBadge key={d} tone="warn" className="gap-1.5">
-                    {d} day{d === 1 ? '' : 's'} before
-                    {editable && (
-                      <button onClick={() => removeCadence(d)} className="rounded-full hover:text-ink focus-ring" aria-label={`Remove ${d} days`}>
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </GlassBadge>
-                ))}
-                {editable && (
-                  <div className="flex items-center gap-1.5">
-                    <GlassInput
-                      type="number" min={1} className="w-20 px-2 py-1 text-xs" placeholder="Days"
-                      value={newCadence} onChange={(e) => setNewCadence(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCadence())}
-                    />
-                    <GlassButton variant="ghost" className="px-2 py-1" onClick={addCadence}>
-                      <Plus className="h-3.5 w-3.5" /> Add
-                    </GlassButton>
-                  </div>
-                )}
-              </div>
-              <div className="mt-4 border-t border-line pt-3">
-                <Field label="Due-soon threshold (days)" hint="Requests within this many days of their due date are flagged 'Due soon' on the dashboard and notifications.">
-                  <GlassInput
-                    type="number" min={1} className="w-28" disabled={!editable}
-                    value={settings.dueSoonThresholdDays}
-                    onChange={(e) => patch({ dueSoonThresholdDays: Math.max(1, Number(e.target.value) || 1) })}
-                  />
-                </Field>
-              </div>
-            </GlassPanel>
-
-            <GlassPanel>
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-start gap-2">
                   <PauseCircle className="mt-0.5 h-4 w-4 text-accent" />
@@ -478,22 +421,6 @@ export function AutomationPage() {
                   </div>
                 </div>
                 <Toggle checked={settings.autoPauseSla} disabled={!editable} onChange={(v) => patch({ autoPauseSla: v })} />
-              </div>
-            </GlassPanel>
-
-            <GlassPanel>
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-start gap-2">
-                  <ArrowUpCircle className="mt-0.5 h-4 w-4 text-accent" />
-                  <div>
-                    <h3 className="text-sm font-semibold text-ink">Escalation alerts</h3>
-                    <p className="mt-1 text-sm text-muted">
-                      Surface high-risk and critical requests on the Notifications tab so managers can
-                      reassign or escalate before a statutory breach.
-                    </p>
-                  </div>
-                </div>
-                <Toggle checked={settings.escalationAlerts} disabled={!editable} onChange={(v) => patch({ escalationAlerts: v })} />
               </div>
             </GlassPanel>
           </div>

@@ -20,6 +20,7 @@ export function NewCasePage() {
   const [requestIdPrefix, setRequestIdPrefix] = React.useState('');
 
   const [requestId, setRequestId] = React.useState('');
+  const [dsrreqNumber, setDsrreqNumber] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [clientCenterStatus, setClientCenterStatus] = React.useState<string>('Not located');
@@ -94,7 +95,7 @@ export function NewCasePage() {
     setBusy(true);
     const input: NewCaseInput = {
       requestTypes,
-      caseNumberOverride: requestId.trim(),
+      caseNumberOverride: dsrreqNumber.trim() || undefined,
       intakeChannel,
       jurisdiction: 'US',
       priority: 'Medium',
@@ -141,7 +142,7 @@ export function NewCasePage() {
                 <GlassInput
                   value={requestId}
                   onChange={(e) => setRequestId(e.target.value)}
-                  placeholder={requestIdPrefix ? `e.g. ${requestIdPrefix}0000001` : 'e.g. REQ-1042'}
+                  placeholder={requestIdPrefix ? `e.g. ${requestIdPrefix}0000001` : 'e.g. PH-0000001'}
                 />
               </Field>
               <Field label="Last name" error={errors.lastName}>
@@ -198,11 +199,18 @@ export function NewCasePage() {
                 ))}
               </div>
             </Field>
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <Field label="Intake channel">
                 <GlassSelect value={intakeChannel} onChange={(e) => setChannel(e.target.value)}>
                   {INTAKE_CHANNELS.map((c) => <option key={c}>{c}</option>)}
                 </GlassSelect>
+              </Field>
+              <Field label="DSRREQ #">
+                <GlassInput
+                  value={dsrreqNumber}
+                  onChange={(e) => setDsrreqNumber(e.target.value)}
+                  placeholder="Auto-assigned"
+                />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">

@@ -4,7 +4,7 @@
 // -----------------------------------------------------------------------------
 
 export const APP_CONFIG = {
-  version: '1.0.52',
+  version: '1.0.53',
   productName: 'PrivacyFlow',
   tagline: 'DSR Tracking',
   updates: {
@@ -19,7 +19,8 @@ export const APP_CONFIG = {
     'PrivacyFlow is a workflow and record-keeping tool for privacy operations. All demonstration data is fictional.',
   defaults: {
     organizationName: 'Raymond James Financial',
-    caseNumberPrefix: 'DSRREQ',
+    caseNumberPrefix: 'PH-',
+    dsrreqNumberPrefix: 'DSRREQ',
     caseNumberSequenceLength: 7,
     defaultJurisdiction: 'US',
     autoLockMinutes: 15,

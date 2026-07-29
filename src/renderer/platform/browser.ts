@@ -564,6 +564,8 @@ function load(): Db | null {
     if (typeof cache.projectSeq !== 'number') cache.projectSeq = 0;
     const d = defaultSettings();
     const s = cache.settings as OrgSettings;
+    const settingsMigrated = !s.caseNumberPrefix || s.caseNumberPrefix === 'DSRREQ';
+    if (settingsMigrated) s.caseNumberPrefix = d.caseNumberPrefix;
     if (!Array.isArray(s.slaRules) || !s.slaRules.length) s.slaRules = d.slaRules;
     if (typeof s.retentionYears !== 'number' || s.retentionYears < 1) s.retentionYears = d.retentionYears;
     if (typeof s.autoRetentionCleanup !== 'boolean') s.autoRetentionCleanup = d.autoRetentionCleanup;
@@ -578,7 +580,7 @@ function load(): Db | null {
     const workflowMigrated = migrateWorkflow(cache);
     const templateMigrated = migrateRequesterFirstNameTemplates(cache);
     const requestTypeMigrated = migrateRequestTypeNames(cache);
-    const migrated = workflowMigrated || templateMigrated || requestTypeMigrated;
+    const migrated = settingsMigrated || workflowMigrated || templateMigrated || requestTypeMigrated;
     if (migrated && !isReadOnly()) save(cache);
     return cache;
   } catch {

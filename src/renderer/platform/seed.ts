@@ -53,13 +53,12 @@ export function periodFor(jurisdiction: string) {
   );
 }
 
-// Request numbers follow the ServiceNow-style format: prefix + zero-padded
-// sequence, e.g. DSRREQ0000001. The prefix and padding length come from the
-// workspace settings (editable on the Settings tab).
+// DSRREQ numbers follow the ServiceNow-style format: fixed prefix + zero-padded
+// sequence, e.g. DSRREQ0000001. Request ID uses the editable organization prefix.
 export function nextCaseNumber(db: Db): string {
   db.seq += 1;
   const n = String(db.seq).padStart(APP_CONFIG.defaults.caseNumberSequenceLength, '0');
-  return `${db.settings.caseNumberPrefix}${n}`;
+  return `${APP_CONFIG.defaults.dsrreqNumberPrefix}${n}`;
 }
 
 // Project numbers follow the same pattern with the PRJ prefix: PRJ0000001.

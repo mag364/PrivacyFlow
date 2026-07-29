@@ -65,9 +65,9 @@ export function CasesPage() {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
     const header = [
-      'Request', 'Status', 'Request Types', 'Intake Channel',
+      'Request ID', 'Status', 'DSRREQ #', 'Request Types', 'Intake Channel',
       'Team', 'Business Unit', 'Description',
-      'Request ID', 'Requester Last Name', 'Requester Emails',
+      'Requester Last Name', 'Requester Emails',
       'Relationship', 'Minor', 'Authorized Agent',
       'Client Center Status', 'Emailed FA',
       'Date Received',
@@ -77,14 +77,14 @@ export function CasesPage() {
     ];
 
     const lines = rows.map((c) => [
-      c.caseNumber,
+      c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? '',
       c.status,
+      c.caseNumber,
       c.requestTypes.join('; '),
       c.intakeChannel,
       c.team,
       c.businessUnit,
       c.description,
-      c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? '',
       c.subject.lastName,
       c.subject.emails.join('; '),
       c.subject.relationship,
@@ -164,9 +164,9 @@ export function CasesPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-[var(--pf-surface-2)]">
               <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
-                <th className="px-4 py-3">Request</th>
-                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Request ID</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">DSRREQ #</th>
                 <th className="px-4 py-3">Subject</th>
                 <th className="px-4 py-3">Types</th>
                 <th className="px-4 py-3">Date Received</th>
@@ -185,9 +185,9 @@ export function CasesPage() {
                     onClick={() => navigate(`/cases/${c.id}`)}
                     className="cursor-pointer border-b border-line/60 hover:bg-[var(--pf-highlight)]"
                   >
-                    <td className="px-4 py-3 font-medium text-accent">{c.caseNumber}</td>
+                    <td className="px-4 py-3 font-medium text-accent">{requestId}</td>
                     <td className="px-4 py-3"><GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge></td>
-                    <td className="px-4 py-3 text-ink/90">{requestId}</td>
+                    <td className="px-4 py-3 text-ink/90">{c.caseNumber}</td>
                     <td className="px-4 py-3 text-ink">{c.subject.lastName}</td>
                     <td className="px-4 py-3 text-muted">{c.requestTypes.join(', ')}</td>
                     <td className="px-4 py-3 text-ink/90">{fmtDate(dateReceived)}</td>

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type {
-  DsrCase, CaseNote, Communication, CaseDocument, AuditEvent,
+  DsrCase, CaseNote, Communication, CaseDocument, AuditEvent, SourceEmail,
 } from '@shared/types';
 import {
   CASE_STATUSES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES,
@@ -19,6 +19,7 @@ import {
 } from '../../components/glass';
 import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { useAuth, can } from '../../store/auth';
+import { sourceEmailFromFile, sourceEmailSummary } from '../../lib/emailSource';
 
 type TabKey = 'overview' | 'documents' | 'communications' | 'notes' | 'audit';
 
@@ -94,6 +95,7 @@ export function CaseDetailPage() {
   const [commSubject, setCommSubject] = React.useState('');
   const [commSummary, setCommSummary] = React.useState('');
   const [commFile, setCommFile] = React.useState<File | null>(null);
+  const [commSourceEmail, setCommSourceEmail] = React.useState<SourceEmail | null>(null);
   const [commError, setCommError] = React.useState('');
   const [commBusy, setCommBusy] = React.useState(false);
 
@@ -265,16 +267,19 @@ export function CaseDetailPage() {
     setCommBusy(true);
     setCommError('');
     try {
+      const parsedEmail = commSourceEmail ?? (commFile && /\.eml$/i.test(commFile.name) ? await sourceEmailFromFile(commFile) : null);
       await platform().cases.addCommunication(id, {
-        subject,
-        summary: commSummary.trim() || `Attached file: ${subject}${commFile ? ` (${(commFile.size / 1024).toFixed(0)} KB)` : ''}`,
+        subject: parsedEmail?.subject || subject,
+        summary: commSummary.trim() || (parsedEmail ? sourceEmailSummary(parsedEmail) : `Attached file: ${subject}${commFile ? ` (${(commFile.size / 1024).toFixed(0)} KB)` : ''}`),
         direction: 'Inbound',
-        channel: 'File attachment',
+        channel: parsedEmail ? 'Uploaded email' : 'File attachment',
+        sourceEmail: parsedEmail ?? undefined,
       });
       setAddingComm(false);
       setCommSubject('');
       setCommSummary('');
       setCommFile(null);
+      setCommSourceEmail(null);
       await load();
     } catch (e) {
       setCommError(e instanceof Error ? e.message : 'Unable to add the file.');
@@ -595,7 +600,17 @@ export function CaseDetailPage() {
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null;
                         setCommFile(f);
+                        setCommSourceEmail(null);
                         if (f && !commSubject) setCommSubject(f.name);
+                        if (f && /\.eml$/i.test(f.name)) {
+                          void sourceEmailFromFile(f)
+                            .then((parsed) => {
+                              setCommSourceEmail(parsed);
+                              setCommSubject(parsed.subject || f.name);
+                              if (!commSummary.trim()) setCommSummary(sourceEmailSummary(parsed));
+                            })
+                            .catch((err) => setCommError(err instanceof Error ? err.message : 'Unable to read the uploaded email.'));
+                        }
                       }}
                     />
                   </Field>

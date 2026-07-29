@@ -2,6 +2,7 @@ import type {
   DsrCase, User, AuditEvent, IntegrityReport, OrgSettings, Task, CaseNote,
   Communication, Decision, CaseDocument, StatusHistoryEntry, SlaHistoryEntry,
   DataSubject, IntakeDates, Project,
+  SourceEmail,
 } from '@shared/types';
 import type {
   CaseStatus, RequestType, IntakeChannel, Jurisdiction, Priority, RiskLevel, Role,
@@ -47,6 +48,7 @@ export interface NewCaseInput {
   ownerId?: string;
   subject: DataSubject;
   intakeDates?: IntakeDates;
+  sourceEmail?: SourceEmail;
 }
 
 export type NewProjectInput = Omit<Project, 'id' | 'createdBy' | 'createdAt' | 'projectNumber' | 'status'> & {
@@ -120,6 +122,7 @@ export interface AddCommunicationInput {
   summary: string;
   direction?: 'Inbound' | 'Outbound';
   channel?: string;
+  sourceEmail?: SourceEmail;
 }
 
 export interface PrivacyFlowAPI {

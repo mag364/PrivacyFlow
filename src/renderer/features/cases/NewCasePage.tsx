@@ -1,14 +1,16 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Mail } from 'lucide-react';
 import { platform } from '../../platform';
 import {
   REQUEST_TYPES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES, RELATIONSHIP_TYPES,
 } from '@shared/constants';
 import type { NewCaseInput } from '../../platform/types';
+import type { SourceEmail } from '@shared/types';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
+import { sourceEmailFromFile } from '../../lib/emailSource';
 
 export function NewCasePage() {
   const navigate = useNavigate();
@@ -33,6 +35,8 @@ export function NewCasePage() {
   const [standardResponseSent, setStandardResponseSent] = React.useState('');
   const [forwardedToRon, setForwardedToRon] = React.useState('');
   const [description, setDescription] = React.useState('');
+  const [sourceEmail, setSourceEmail] = React.useState<SourceEmail | null>(null);
+  const [sourceEmailError, setSourceEmailError] = React.useState('');
 
   React.useEffect(() => {
     platform().system.settings().then((settings) => setRequestIdPrefix(settings.caseNumberPrefix));
@@ -60,6 +64,28 @@ export function NewCasePage() {
     if (!description.trim()) e.description = 'Describe the request';
     setErrors(e);
     return Object.keys(e).length === 0;
+  }
+
+  async function handleSourceEmail(file: File | null) {
+    setSourceEmailError('');
+    setSourceEmail(null);
+    if (!file) return;
+    if (!/\.eml$/i.test(file.name)) {
+      setSourceEmailError('Upload an .eml email file. Outlook .msg files can be saved as .eml from Outlook before upload.');
+      return;
+    }
+    try {
+      const parsed = await sourceEmailFromFile(file);
+      setSourceEmail(parsed);
+      if (parsed.fromEmail && !email.trim()) setEmail(parsed.fromEmail);
+      if (parsed.fromName && !lastName.trim()) {
+        const parts = parsed.fromName.trim().split(/\s+/);
+        setLastName(parts[parts.length - 1]);
+      }
+      if (parsed.bodyText && !description.trim()) setDescription(parsed.bodyText.slice(0, 1500));
+    } catch (e) {
+      setSourceEmailError(e instanceof Error ? e.message : 'Unable to read the uploaded email.');
+    }
   }
 
   async function submit(ev: React.FormEvent) {
@@ -92,6 +118,7 @@ export function NewCasePage() {
         standardResponseSent: standardResponseSent || undefined,
         forwardedEmailToRon: forwardedToRon || undefined,
       },
+      sourceEmail: sourceEmail ?? undefined,
     };
     const created = await platform().cases.create(input);
     setBusy(false);
@@ -147,6 +174,24 @@ export function NewCasePage() {
                 <input type="checkbox" className="h-4 w-4 focus-ring" checked={authorizedAgent} onChange={(e) => setAgent(e.target.checked)} /> Authorized agent
               </label>
             </div>
+            <Field label="Original email" hint="Upload the requester email as .eml so replies and forwards can preserve the original message context.">
+              <input
+                type="file"
+                accept=".eml,message/rfc822"
+                className="block w-full text-sm text-muted file:mr-3 file:rounded-capsule file:border file:border-line file:bg-[var(--pf-highlight)] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink hover:file:brightness-110"
+                onChange={(e) => void handleSourceEmail(e.target.files?.[0] ?? null)}
+              />
+            </Field>
+            {sourceEmail && (
+              <div className="flex items-start gap-2 rounded-xl border border-line bg-[var(--pf-highlight)] px-3 py-2 text-xs text-muted">
+                <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+                <p>
+                  Parsed <span className="text-ink">{sourceEmail.subject}</span>
+                  {sourceEmail.fromEmail ? ` from ${sourceEmail.fromEmail}` : ''}. This email will be saved in Communications.
+                </p>
+              </div>
+            )}
+            {sourceEmailError && <p className="text-xs text-red-400">{sourceEmailError}</p>}
           </div>
         </GlassPanel>
 

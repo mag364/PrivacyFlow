@@ -165,6 +165,18 @@ export interface Communication {
   sentAt: string;
   status: string;
   createdBy: string;
+  sourceEmail?: SourceEmail;
+}
+
+export interface SourceEmail {
+  filename: string;
+  fromName?: string;
+  fromEmail?: string;
+  to?: string;
+  subject: string;
+  date?: string;
+  bodyText: string;
+  rawSizeBytes: number;
 }
 
 export interface Decision {

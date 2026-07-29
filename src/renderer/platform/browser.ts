@@ -2,6 +2,7 @@ import { addDays, isSameMonth, parseISO } from 'date-fns';
 import type {
   DsrCase, AuditEvent, IntegrityReport, OrgSettings, CaseNote, SlaInfo, Project, SlaRule,
   EmailTemplate, AutomationRule, AutomationTrigger, AutomationRecipient, User, CaseDocument, Communication,
+  SourceEmail,
 } from '@shared/types';
 import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
@@ -276,6 +277,34 @@ function renderTemplate(text: string, c: DsrCase, orgName: string, department?: 
   return text.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (m, key) => map[key] ?? m);
 }
 
+function formatOriginalEmail(source: SourceEmail): string {
+  const from = source.fromEmail
+    ? (source.fromName ? `${source.fromName} <${source.fromEmail}>` : source.fromEmail)
+    : 'Unknown sender';
+  return [
+    '',
+    '',
+    '----- Original Message -----',
+    `From: ${from}`,
+    source.to ? `To: ${source.to}` : '',
+    source.date ? `Date: ${source.date}` : '',
+    `Subject: ${source.subject}`,
+    '',
+    source.bodyText,
+  ].filter((line) => line !== '').join('\n');
+}
+
+function prefixedSubject(prefix: 'RE' | 'FW', subject: string): string {
+  const clean = subject.trim();
+  return new RegExp(`^${prefix}:`, 'i').test(clean) ? clean : `${prefix}: ${clean}`;
+}
+
+function sourceEmailForCase(d: Db, caseId: string): SourceEmail | null {
+  return [...d.communications]
+    .filter((comm) => comm.caseId === caseId && comm.direction === 'Inbound' && comm.sourceEmail)
+    .sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0]?.sourceEmail ?? null;
+}
+
 function resolveAutomationRecipient(settings: OrgSettings, name?: string): { label: string; email: string } {
   const label = name?.trim() || 'Department';
   const match = (settings.automationRecipients ?? []).find(
@@ -310,13 +339,17 @@ async function runAutomations(
     if (!tpl) continue;
 
     const isDept = tpl.audience === 'department';
+    const sourceEmail = sourceEmailForCase(d, c.id);
     const resolved = isDept ? resolveAutomationRecipient(d.settings, tpl.department) : null;
     const recipient = isDept
       ? (resolved?.email || `${resolved?.label ?? 'Department'} team`)
-      : (c.subject.emails[0] ?? 'requester');
+      : (sourceEmail?.fromEmail ?? c.subject.emails[0] ?? 'requester');
     const recipientLabel = isDept && resolved?.email ? `${resolved.label} <${resolved.email}>` : recipient;
-    const subject = renderTemplate(tpl.subject, c, d.settings.organizationName, tpl.department);
-    const body = renderTemplate(tpl.body, c, d.settings.organizationName, tpl.department);
+    const renderedSubject = renderTemplate(tpl.subject, c, d.settings.organizationName, tpl.department);
+    const subject = sourceEmail
+      ? prefixedSubject(isDept ? 'FW' : 'RE', sourceEmail.subject)
+      : renderedSubject;
+    const body = `${renderTemplate(tpl.body, c, d.settings.organizationName, tpl.department)}${sourceEmail ? formatOriginalEmail(sourceEmail) : ''}`;
     const now = new Date().toISOString();
     const outlook = m365?.mode === 'outlook' ? outlookBridge() : null;
     const fallbackDraft = m365?.mode === 'outlook' ? mailBridge() : null;
@@ -1093,6 +1126,29 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           intakeDates: input.intakeDates,
         };
         d.cases.push(c);
+        if (input.sourceEmail) {
+          d.communications.push({
+            id: uid(),
+            caseId: c.id,
+            direction: 'Inbound',
+            channel: 'Uploaded email',
+            subject: input.sourceEmail.subject || input.sourceEmail.filename,
+            summary: [
+              `Uploaded source email: ${input.sourceEmail.filename}`,
+              input.sourceEmail.fromEmail
+                ? `From: ${input.sourceEmail.fromName ? `${input.sourceEmail.fromName} <${input.sourceEmail.fromEmail}>` : input.sourceEmail.fromEmail}`
+                : '',
+              input.sourceEmail.to ? `To: ${input.sourceEmail.to}` : '',
+              input.sourceEmail.date ? `Date: ${input.sourceEmail.date}` : '',
+              '',
+              input.sourceEmail.bodyText,
+            ].filter((line) => line !== '').join('\n'),
+            sentAt: now.toISOString(),
+            status: 'Uploaded source email',
+            createdBy: actor?.id ?? 'system',
+            sourceEmail: input.sourceEmail,
+          });
+        }
         d.statusHistory.push({
           id: uid(), caseId: c.id, fromStatus: null, toStatus: 'New',
           actorId: actor?.id ?? 'system', at: now.toISOString(),
@@ -1332,8 +1388,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           subject,
           summary: input.summary,
           sentAt: now,
-          status: 'Logged',
+          status: input.sourceEmail ? 'Uploaded source email' : 'Logged',
           createdBy: actor?.id ?? 'system',
+          sourceEmail: input.sourceEmail,
         };
         d.communications.push(comm);
         c.lastActivityAt = now;
@@ -1343,7 +1400,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           entityType: 'communication',
           entityId: comm.id,
           caseId: id,
-          summary: `File "${comm.subject}" added to ${c.caseNumber} communications`,
+          summary: `${input.sourceEmail ? 'Source email' : 'File'} "${comm.subject}" added to ${c.caseNumber} communications`,
           newValue: { subject: comm.subject, direction: comm.direction },
         });
         save(d);

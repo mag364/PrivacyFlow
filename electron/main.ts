@@ -54,6 +54,100 @@ function resolveDbPath(): string {
 let dbPath = resolveDbPath();
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
+const BACKUP_LIMIT = 30;
+
+interface BackupEntry {
+  id: string;
+  fileName: string;
+  filePath: string;
+  createdAt: string;
+  sizeBytes: number;
+  reason: string;
+}
+
+function backupDir(): string {
+  const dir = path.join(app.getPath('userData'), 'backups');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function backupReason(value: string): string {
+  const cleaned = value.replace(/[^a-z0-9-]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+  return cleaned || 'auto';
+}
+
+function backupEntry(fileName: string): BackupEntry {
+  const filePath = path.join(backupDir(), fileName);
+  const stats = fs.statSync(filePath);
+  const match = /^privacyflow-([a-z0-9-]+)-/.exec(fileName);
+  return {
+    id: fileName,
+    fileName,
+    filePath,
+    createdAt: stats.mtime.toISOString(),
+    sizeBytes: stats.size,
+    reason: match?.[1] ?? 'backup',
+  };
+}
+
+function listBackups(): BackupEntry[] {
+  return fs.readdirSync(backupDir())
+    .filter((fileName) => /^privacyflow-[a-z0-9-]+-\d{8}-\d{6}-\d{3}\.db\.json$/.test(fileName))
+    .map(backupEntry)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function pruneBackups(): void {
+  const backups = listBackups();
+  backups.slice(BACKUP_LIMIT).forEach((entry) => {
+    try {
+      fs.unlinkSync(entry.filePath);
+    } catch {
+      // Best-effort cleanup; never fail a data write because pruning failed.
+    }
+  });
+}
+
+function createBackup(reason: string, content?: string): BackupEntry | null {
+  if (!content && !fs.existsSync(dbPath)) return null;
+  const raw = content ?? fs.readFileSync(dbPath, 'utf8');
+  JSON.parse(raw);
+  const now = new Date();
+  const stamp = now.toISOString()
+    .replace(/[-:TZ]/g, '')
+    .replace(/\.(\d{3}).*/, '-$1');
+  const fileName = `privacyflow-${backupReason(reason)}-${stamp}.db.json`;
+  const filePath = path.join(backupDir(), fileName);
+  fs.writeFileSync(filePath, raw, 'utf8');
+  pruneBackups();
+  return backupEntry(fileName);
+}
+
+function restoreBackup(fileName: string): { restored: BackupEntry; safetyBackup: BackupEntry | null } {
+  if (lockState.mode !== 'write') {
+    const holder = lockState.mode === 'read-only' ? lockState.holder : null;
+    throw new Error(
+      holder
+        ? `Workspace is read-only — ${holder.user} on ${holder.machine} is currently editing.`
+        : 'Workspace is read-only.',
+    );
+  }
+
+  if (!/^[\w.-]+\.db\.json$/.test(fileName)) throw new Error('Invalid backup file.');
+  const backupPath = path.join(backupDir(), fileName);
+  if (!backupPath.startsWith(`${backupDir()}${path.sep}`) || !fs.existsSync(backupPath)) {
+    throw new Error('Backup file was not found.');
+  }
+
+  const raw = fs.readFileSync(backupPath, 'utf8');
+  JSON.parse(raw);
+  const safetyBackup = createBackup('restore-safety');
+  const tmp = `${dbPath}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, raw, 'utf8');
+  fs.renameSync(tmp, dbPath);
+  return { restored: backupEntry(fileName), safetyBackup };
+}
+
 let lock = new WorkspaceLock(dbPath, os.userInfo().username);
 let lockState: LockState = lock.acquire();
 
@@ -104,6 +198,11 @@ ipcMain.handle('workspace:write', async (_e, json: string) => {
   const tmp = `${dbPath}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, json, 'utf8');
   fs.renameSync(tmp, dbPath);
+  try {
+    createBackup('auto', json);
+  } catch {
+    // Do not block the primary shared-workspace save if the local backup fails.
+  }
   return true;
 });
 
@@ -140,7 +239,26 @@ ipcMain.handle('workspace:choosePath', async () => {
   dbPath = nextPath;
   lock = new WorkspaceLock(dbPath, os.userInfo().username);
   lockState = lock.acquire();
+  try {
+    createBackup('auto');
+  } catch {
+    // Ignore invalid/missing workspace files; the next valid save will back up.
+  }
   return { dbPath, lockState, changed: true };
+});
+
+ipcMain.handle('backup:list', async () => listBackups());
+
+ipcMain.handle('backup:create', async () => {
+  const backup = createBackup('manual');
+  if (!backup) throw new Error('No workspace database file exists yet.');
+  return backup;
+});
+
+ipcMain.handle('backup:restore', async (_e, input: { fileName?: string }) => {
+  const fileName = String(input?.fileName || '').trim();
+  if (!fileName) throw new Error('Choose a backup to restore.');
+  return restoreBackup(fileName);
 });
 
 ipcMain.handle('updater:downloadReleaseAsset', async (_e, input: { assetApiUrl?: string; token?: string; fileName?: string }) => {
@@ -251,6 +369,11 @@ $mail.Display($false)
 });
 
 app.whenReady().then(() => {
+  try {
+    createBackup('startup');
+  } catch {
+    // A missing or invalid workspace should not prevent the app from opening.
+  }
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

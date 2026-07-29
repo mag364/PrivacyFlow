@@ -4,7 +4,7 @@ import {
   Save, RotateCcw, Check, Mail, Link2, Unlink, ShieldCheck, Info, UserCog, UserPlus,
   KeyRound, Copy, HardDrive, FolderOpen, Lock, Pencil, Palette, Building2, Plug,
   Database, Trash2, RefreshCw, Download, ExternalLink, AlertTriangle, PackageCheck,
-  Upload, FileJson,
+  Upload, FileJson, DatabaseBackup, ArchiveRestore,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { platform } from '../../platform';
@@ -18,7 +18,7 @@ import { useAuth, can } from '../../store/auth';
 import { fmtDateTime } from '../../lib/format';
 import {
   workspaceBridge, updaterBridge, workspaceInfo, chooseWorkspacePath, type WorkspaceInfo,
-  outlookBridge, mailBridge,
+  outlookBridge, mailBridge, backupBridge, type BackupEntry,
 } from '../../platform/workspace';
 import { APP_CONFIG } from '@shared/config';
 import type { ImportSummary } from '../../platform/types';
@@ -26,7 +26,7 @@ import {
   caseInputFromRow, privacyFlowPayloadFromJson, projectInputFromRow, rowsFromFile,
 } from '../../lib/importers';
 
-type TabKey = 'workspace' | 'appearance' | 'organization' | 'integrations' | 'import_export' | 'users';
+type TabKey = 'workspace' | 'appearance' | 'organization' | 'integrations' | 'import_export' | 'backup_restore' | 'users';
 
 const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: 'workspace', label: 'Workspace', icon: HardDrive },
@@ -34,6 +34,7 @@ const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: 'organization', label: 'Organization', icon: Building2 },
   { key: 'integrations', label: 'Integrations', icon: Plug },
   { key: 'import_export', label: 'Import & Export', icon: Upload },
+  { key: 'backup_restore', label: 'Backup / Restore', icon: DatabaseBackup },
   { key: 'users', label: 'Users', icon: UserCog },
 ];
 
@@ -735,6 +736,183 @@ function ImportExportTab() {
   );
 }
 
+function BackupRestoreTab() {
+  const [backups, setBackups] = React.useState<BackupEntry[]>([]);
+  const [selected, setSelected] = React.useState('');
+  const [busy, setBusy] = React.useState('');
+  const [message, setMessage] = React.useState('');
+  const [error, setError] = React.useState('');
+  const bridge = backupBridge();
+  const editable = can(useAuth.getState().user?.role, 'settings.manage');
+
+  async function refreshBackups(nextSelected?: string) {
+    if (!bridge) return;
+    const list = await bridge.list();
+    setBackups(list);
+    setSelected(nextSelected ?? list[0]?.fileName ?? '');
+  }
+
+  React.useEffect(() => {
+    void refreshBackups();
+  }, []);
+
+  async function createManualBackup() {
+    if (!bridge) return;
+    setBusy('create');
+    setMessage('');
+    setError('');
+    try {
+      const backup = await bridge.create();
+      await refreshBackups(backup.fileName);
+      setMessage(`Created local backup ${backup.fileName}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to create backup.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function restoreSelectedBackup() {
+    if (!bridge || !selected) return;
+    const backup = backups.find((item) => item.fileName === selected);
+    if (!window.confirm(
+      `Restore ${backup?.fileName ?? selected}? This replaces the current workspace database and reloads PrivacyFlow.`,
+    )) return;
+
+    setBusy('restore');
+    setMessage('');
+    setError('');
+    try {
+      const result = await bridge.restore({ fileName: selected });
+      setMessage(
+        result.safetyBackup
+          ? `Restored ${result.restored.fileName}. Safety backup created as ${result.safetyBackup.fileName}.`
+          : `Restored ${result.restored.fileName}.`,
+      );
+      window.alert('Backup restored. PrivacyFlow will reload from the restored workspace.');
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to restore backup.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  if (!bridge) {
+    return (
+      <GlassPanel>
+        <div className="mb-4 flex items-center gap-2">
+          <DatabaseBackup className="h-4 w-4 text-accent" />
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Backup / Restore</h3>
+        </div>
+        <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+          <p className="text-xs text-muted">
+            Local automatic backups are available in the packaged Windows desktop app. The browser preview
+            stores data in local storage, so use Import &amp; Export for preview data transfers.
+          </p>
+        </div>
+      </GlassPanel>
+    );
+  }
+
+  const selectedBackup = backups.find((item) => item.fileName === selected);
+
+  return (
+    <GlassPanel>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <DatabaseBackup className="h-4 w-4 text-accent" />
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Backup / Restore</h3>
+            <p className="text-xs text-muted">
+              PrivacyFlow automatically keeps local copies of valid workspace saves on this PC.
+            </p>
+          </div>
+        </div>
+        <GlassBadge tone="info">{backups.length} local backup{backups.length === 1 ? '' : 's'}</GlassBadge>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="content-surface overflow-hidden">
+          {backups.length ? (
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--pf-surface-2)]">
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                  <th className="px-4 py-3">Backup</th>
+                  <th className="px-4 py-3">Reason</th>
+                  <th className="px-4 py-3">Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.map((backup) => (
+                  <tr
+                    key={backup.id}
+                    className={clsx(
+                      'cursor-pointer border-b border-line/60 transition-colors hover:bg-[var(--pf-highlight)]',
+                      selected === backup.fileName && 'bg-accent/10',
+                    )}
+                    onClick={() => setSelected(backup.fileName)}
+                  >
+                    <td className="px-4 py-3">
+                      <p className="break-all font-mono text-xs text-ink">{backup.fileName}</p>
+                      <p className="text-[11px] text-muted">{fmtDateTime(backup.createdAt)}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <GlassBadge tone={backup.reason === 'manual' ? 'success' : 'neutral'}>
+                        {backup.reason.replace(/-/g, ' ')}
+                      </GlassBadge>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">{fmtBytes(backup.sizeBytes)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="p-4 text-sm text-muted">
+              No local backups yet. Create one manually, or make a normal workspace edit in the desktop app.
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-xl border border-line bg-[var(--pf-surface)] p-4">
+          <p className="text-sm font-semibold text-ink">Actions</p>
+          {selectedBackup ? (
+            <div className="min-w-0 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
+              <p className="break-all font-mono text-[11px] text-ink">{selectedBackup.filePath}</p>
+              <p className="mt-1 text-[11px] text-muted">
+                {fmtDateTime(selectedBackup.createdAt)} · {fmtBytes(selectedBackup.sizeBytes)}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Choose a backup from the list to restore it.</p>
+          )}
+
+          <GlassButton disabled={!!busy} loading={busy === 'create'} onClick={createManualBackup}>
+            <DatabaseBackup className="h-4 w-4" /> Create backup now
+          </GlassButton>
+          <GlassButton
+            variant="primary"
+            disabled={!editable || !selected || !!busy}
+            loading={busy === 'restore'}
+            onClick={restoreSelectedBackup}
+          >
+            <ArchiveRestore className="h-4 w-4" /> Restore selected
+          </GlassButton>
+          {!editable && <p className="text-[11px] text-muted">Only administrators and privacy managers can restore backups.</p>}
+        </div>
+      </div>
+
+      <p className="mt-3 text-[11px] text-muted">
+        Automatic backups are stored locally on this PC, not on the shared drive. The newest 30 valid
+        workspace backups are kept.
+      </p>
+      {message && <p className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{message}</p>}
+      {error && <p className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
+    </GlassPanel>
+  );
+}
+
 export function SettingsPage() {
   const theme = useTheme();
   const { user, init } = useAuth();
@@ -1175,6 +1353,8 @@ export function SettingsPage() {
       )}
 
       {tab === 'import_export' && <ImportExportTab />}
+
+      {tab === 'backup_restore' && <BackupRestoreTab />}
 
       {tab === 'users' && (
         <GlassPanel>

@@ -38,6 +38,20 @@ export interface DownloadUpdateResult {
   opened: boolean;
 }
 
+export interface BackupEntry {
+  id: string;
+  fileName: string;
+  filePath: string;
+  createdAt: string;
+  sizeBytes: number;
+  reason: string;
+}
+
+export interface RestoreBackupResult {
+  restored: BackupEntry;
+  safetyBackup: BackupEntry | null;
+}
+
 export interface WorkspaceBridge {
   read: () => string | null;
   write: (json: string) => Promise<boolean>;
@@ -50,6 +64,12 @@ export interface WorkspaceBridge {
 
 export interface UpdaterBridge {
   downloadReleaseAsset: (input: DownloadUpdateInput) => Promise<DownloadUpdateResult>;
+}
+
+export interface BackupBridge {
+  list: () => Promise<BackupEntry[]>;
+  create: () => Promise<BackupEntry>;
+  restore: (input: { fileName: string }) => Promise<RestoreBackupResult>;
 }
 
 export interface MailDraftInput {
@@ -112,6 +132,7 @@ interface Injected {
   isElectron?: boolean;
   workspace?: WorkspaceBridge;
   updater?: UpdaterBridge;
+  backup?: BackupBridge;
   mail?: MailBridge;
   outlook?: OutlookBridge;
 }
@@ -126,6 +147,10 @@ export function workspaceBridge(): WorkspaceBridge | null {
 
 export function updaterBridge(): UpdaterBridge | null {
   return injected().updater ?? null;
+}
+
+export function backupBridge(): BackupBridge | null {
+  return injected().backup ?? null;
 }
 
 export function mailBridge(): MailBridge | null {

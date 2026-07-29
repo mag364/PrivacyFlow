@@ -114,6 +114,32 @@ export interface M365SendMailInput {
   saveToSentItems?: boolean;
 }
 
+export interface M365TokenRefreshInput {
+  clientId: string;
+  refreshToken: string;
+  scopes?: string[];
+}
+
+export interface M365DeviceLoginInput {
+  clientId: string;
+  scopes?: string[];
+}
+
+export interface M365DevicePollInput {
+  clientId: string;
+  deviceCode: string;
+  interval: number;
+  expiresIn: number;
+}
+
+export interface M365GraphBridge {
+  startDeviceLogin: (input: M365DeviceLoginInput) => Promise<M365DeviceCode>;
+  pollDeviceLogin: (input: M365DevicePollInput) => Promise<M365TokenResult>;
+  refreshToken: (input: M365TokenRefreshInput) => Promise<M365TokenResult>;
+  profile: (input: { accessToken: string }) => Promise<M365Profile>;
+  sendMail: (input: M365SendMailInput) => Promise<boolean>;
+}
+
 export interface OutlookAccount {
   email: string;
   displayName?: string;
@@ -135,6 +161,7 @@ interface Injected {
   updater?: UpdaterBridge;
   backup?: BackupBridge;
   mail?: MailBridge;
+  graph?: M365GraphBridge;
   outlook?: OutlookBridge;
 }
 
@@ -156,6 +183,10 @@ export function backupBridge(): BackupBridge | null {
 
 export function mailBridge(): MailBridge | null {
   return injected().mail ?? null;
+}
+
+export function graphBridge(): M365GraphBridge | null {
+  return injected().graph ?? null;
 }
 
 export function outlookBridge(): OutlookBridge | null {

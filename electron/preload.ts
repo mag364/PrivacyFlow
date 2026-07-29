@@ -32,6 +32,16 @@ contextBridge.exposeInMainWorld('privacyflow', {
   mail: {
     openDraft: (input: { to: string; subject: string; body: string }) => ipcRenderer.invoke('mail:openDraft', input),
   },
+  graph: {
+    startDeviceLogin: (input: { clientId: string; scopes?: string[] }) => ipcRenderer.invoke('graph:startDeviceLogin', input),
+    pollDeviceLogin: (input: { clientId: string; deviceCode: string; interval: number; expiresIn: number }) =>
+      ipcRenderer.invoke('graph:pollDeviceLogin', input),
+    refreshToken: (input: { clientId: string; refreshToken: string; scopes?: string[] }) =>
+      ipcRenderer.invoke('graph:refreshToken', input),
+    profile: (input: { accessToken: string }) => ipcRenderer.invoke('graph:profile', input),
+    sendMail: (input: { accessToken: string; to: string; subject: string; body: string; saveToSentItems?: boolean }) =>
+      ipcRenderer.invoke('graph:sendMail', input),
+  },
   outlook: {
     accounts: () => ipcRenderer.invoke('outlook:accounts'),
     openDraft: (input: { accountEmail?: string; to: string; subject: string; body: string }) =>

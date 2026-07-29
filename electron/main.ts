@@ -332,6 +332,136 @@ ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; subject?: stri
   return shell.openExternal(url);
 });
 
+const GRAPH_SCOPES = ['openid', 'profile', 'User.Read', 'Mail.Send', 'offline_access'];
+
+function formBody(values: Record<string, string>): URLSearchParams {
+  const body = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => body.set(key, value));
+  return body;
+}
+
+async function graphTokenRequest(values: Record<string, string>) {
+  const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody(values),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = String(json.error_description || json.error || `Microsoft sign-in failed with HTTP ${res.status}`);
+    throw new Error(message.replace(/\s+/g, ' ').trim());
+  }
+  return json;
+}
+
+ipcMain.handle('graph:startDeviceLogin', async (_e, input: { clientId?: string; scopes?: string[] }) => {
+  const clientId = String(input?.clientId || '').trim();
+  if (!clientId) throw new Error('Application (client) ID is required for Microsoft Graph sign-in.');
+  const scopes = (input?.scopes?.length ? input.scopes : GRAPH_SCOPES).join(' ');
+  const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/devicecode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody({ client_id: clientId, scope: scopes }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = String(json.error_description || json.error || `Microsoft device sign-in failed with HTTP ${res.status}`);
+    throw new Error(message.replace(/\s+/g, ' ').trim());
+  }
+  const uri = String(json.verification_uri || json.verification_url || '');
+  if (uri) shell.openExternal(uri);
+  return json;
+});
+
+ipcMain.handle('graph:pollDeviceLogin', async (_e, input: { clientId?: string; deviceCode?: string; interval?: number; expiresIn?: number }) => {
+  const clientId = String(input?.clientId || '').trim();
+  const deviceCode = String(input?.deviceCode || '').trim();
+  if (!clientId || !deviceCode) throw new Error('Microsoft device sign-in was not started.');
+  const started = Date.now();
+  const expiresMs = Math.max(60, Number(input?.expiresIn) || 900) * 1000;
+  let intervalMs = Math.max(5, Number(input?.interval) || 5) * 1000;
+  while (Date.now() - started < expiresMs) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        client_id: clientId,
+        device_code: deviceCode,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.ok) return json;
+    if (json.error === 'authorization_pending') continue;
+    if (json.error === 'slow_down') {
+      intervalMs += 5000;
+      continue;
+    }
+    const message = String(json.error_description || json.error || `Microsoft sign-in failed with HTTP ${res.status}`);
+    throw new Error(message.replace(/\s+/g, ' ').trim());
+  }
+  throw new Error('Microsoft sign-in expired before it was completed.');
+});
+
+ipcMain.handle('graph:refreshToken', async (_e, input: { clientId?: string; refreshToken?: string; scopes?: string[] }) => {
+  const clientId = String(input?.clientId || '').trim();
+  const refreshToken = String(input?.refreshToken || '').trim();
+  if (!clientId || !refreshToken) throw new Error('Microsoft Graph refresh token is unavailable.');
+  const scopes = (input?.scopes?.length ? input.scopes : GRAPH_SCOPES).join(' ');
+  return graphTokenRequest({
+    grant_type: 'refresh_token',
+    client_id: clientId,
+    refresh_token: refreshToken,
+    scope: scopes,
+  });
+});
+
+ipcMain.handle('graph:profile', async (_e, input: { accessToken?: string }) => {
+  const accessToken = String(input?.accessToken || '').trim();
+  if (!accessToken) throw new Error('Microsoft Graph access token is unavailable.');
+  const res = await fetch('https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = String(json.error?.message || `Microsoft Graph profile failed with HTTP ${res.status}`);
+    throw new Error(message.replace(/\s+/g, ' ').trim());
+  }
+  return json;
+});
+
+ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: string; subject?: string; body?: string; saveToSentItems?: boolean }) => {
+  const accessToken = String(input?.accessToken || '').trim();
+  const to = String(input?.to || '').trim();
+  if (!accessToken) throw new Error('Microsoft Graph access token is unavailable.');
+  if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: {
+        subject: String(input?.subject || ''),
+        body: {
+          contentType: 'Text',
+          content: String(input?.body || ''),
+        },
+        toRecipients: [{ emailAddress: { address: to } }],
+      },
+      saveToSentItems: input?.saveToSentItems ?? true,
+    }),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    const message = String(json.error?.message || `Microsoft Graph send failed with HTTP ${res.status}`);
+    throw new Error(message.replace(/\s+/g, ' ').trim());
+  }
+  return true;
+});
+
 function runOutlookScript(script: string): Promise<string> {
   if (process.platform !== 'win32') {
     return Promise.reject(new Error('Local Outlook integration is only available in the Windows desktop app.'));

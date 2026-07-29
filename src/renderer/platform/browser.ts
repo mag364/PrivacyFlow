@@ -19,7 +19,7 @@ import {
   type Db, appendAudit, createSeed, nextActionFor, nextCaseNumber, nextProjectNumber,
   uid, fakeHash,
 } from './seed';
-import { workspaceBridge, isReadOnly, mailBridge, outlookBridge } from './workspace';
+import { workspaceBridge, isReadOnly, mailBridge, outlookBridge, graphBridge } from './workspace';
 
 // -----------------------------------------------------------------------------
 // Persistence-backed implementation of PrivacyFlowAPI.
@@ -344,6 +344,29 @@ function resolveAutomationRecipient(settings: OrgSettings, name?: string): { lab
   return { label, email: match?.email.trim() ?? '' };
 }
 
+function tokenExpiry(expiresIn: number): string {
+  return new Date(Date.now() + Math.max(60, expiresIn - 120) * 1000).toISOString();
+}
+
+async function graphAccessToken(d: Db): Promise<string | null> {
+  const graph = graphBridge();
+  const m365 = d.settings.m365;
+  if (!graph || m365?.mode !== 'graph' || !m365.clientId) return null;
+  if (m365.accessToken && m365.expiresAt && new Date(m365.expiresAt).getTime() > Date.now() + 60_000) {
+    return m365.accessToken;
+  }
+  if (!m365.refreshToken) return m365.accessToken ?? null;
+  const token = await graph.refreshToken({ clientId: m365.clientId, refreshToken: m365.refreshToken });
+  d.settings.m365 = {
+    ...m365,
+    accessToken: token.access_token,
+    refreshToken: token.refresh_token ?? m365.refreshToken,
+    expiresAt: tokenExpiry(token.expires_in),
+  };
+  save(d);
+  return token.access_token;
+}
+
 async function runAutomations(
   d: Db,
   c: DsrCase,
@@ -378,14 +401,36 @@ async function runAutomations(
       : renderedSubject;
     const body = `${renderTemplate(tpl.body, c, d.settings.organizationName, tpl.department)}${sourceEmail ? formatOriginalEmail(sourceEmail) : ''}`;
     const now = new Date().toISOString();
+    const graph = m365?.mode === 'graph' ? graphBridge() : null;
     const outlook = m365?.mode === 'outlook' ? outlookBridge() : null;
-    const fallbackDraft = m365?.mode === 'outlook' ? mailBridge() : null;
+    const fallbackDraft = m365?.mode === 'outlook' || m365?.mode === 'graph' || m365?.mode === 'mailto' ? mailBridge() : null;
     let deliveryNote = '';
     let deliveryStatus = 'Logged only';
 
-    if (m365?.mode === 'outlook' && /.+@.+\..+/.test(recipient)) {
+    if (m365?.mode === 'graph' && /.+@.+\..+/.test(recipient)) {
       try {
-        if (outlook) {
+        const accessToken = await graphAccessToken(d);
+        if (!graph || !accessToken) throw new Error('Microsoft Graph connection is unavailable.');
+        await graph.sendMail({ accessToken, to: recipient, subject, body, saveToSentItems: true });
+        deliveryStatus = 'Sent with Microsoft Graph';
+      } catch (e) {
+        if (fallbackDraft) {
+          try {
+            await fallbackDraft.openDraft({ to: recipient, subject, body });
+            deliveryStatus = 'Draft opened in default mail app';
+            deliveryNote = `\n\nMicrosoft Graph send failed, so PrivacyFlow opened a mail draft instead: ${e instanceof Error ? e.message : 'Graph send failed.'}`;
+          } catch {
+            deliveryStatus = 'Draft not opened';
+            deliveryNote = `\n\nMicrosoft Graph send failed and mailto fallback could not open: ${e instanceof Error ? e.message : 'Graph send failed.'}`;
+          }
+        } else {
+          deliveryStatus = 'Draft not opened';
+          deliveryNote = `\n\nMicrosoft Graph send failed and no mailto fallback was available: ${e instanceof Error ? e.message : 'Graph send failed.'}`;
+        }
+      }
+    } else if ((m365?.mode === 'outlook' || m365?.mode === 'mailto') && /.+@.+\..+/.test(recipient)) {
+      try {
+        if (m365.mode === 'outlook' && outlook) {
           await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, subject, body });
           deliveryStatus = 'Draft opened in Outlook';
         } else if (fallbackDraft) {
@@ -402,7 +447,7 @@ async function runAutomations(
       }
     } else if (m365?.mode === 'outlook') {
       deliveryStatus = 'Draft not opened';
-      deliveryNote = `\n\nOutlook draft was not opened because ${recipient} does not have a configured email address. Add it in Automation > Recipients.`;
+      deliveryNote = `\n\nDraft was not opened because ${recipient} does not have a configured email address. Add it in Automation > Recipients.`;
     } else if (m365?.mode === 'simulated') {
       deliveryStatus = 'Simulated only';
       deliveryNote = '\n\nBrowser preview records simulated delivery only. Open the Windows desktop app and connect Microsoft 365 (Outlook) to create drafts.';

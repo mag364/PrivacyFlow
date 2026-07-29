@@ -304,11 +304,12 @@ export interface M365Integration {
   tenantId?: string;
   connectedAt?: string;
   connectedBy?: string;
-  mode: 'graph' | 'outlook' | 'simulated';
+  mode: 'graph' | 'outlook' | 'mailto' | 'simulated';
   clientId?: string;
   accessToken?: string;
   refreshToken?: string;
   expiresAt?: string;
+  fallback?: 'mailto';
 }
 
 export interface OrgSettings {

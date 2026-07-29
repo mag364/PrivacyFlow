@@ -18,7 +18,7 @@ import { useAuth, can } from '../../store/auth';
 import { fmtDateTime } from '../../lib/format';
 import {
   workspaceBridge, updaterBridge, workspaceInfo, chooseWorkspacePath, type WorkspaceInfo,
-  outlookBridge, mailBridge, backupBridge, type BackupEntry,
+  outlookBridge, mailBridge, graphBridge, backupBridge, type BackupEntry,
 } from '../../platform/workspace';
 import { APP_CONFIG } from '@shared/config';
 import type { ImportSummary } from '../../platform/types';
@@ -992,7 +992,9 @@ export function SettingsPage() {
 
   // M365 connect form state
   const [connecting, setConnecting] = React.useState(false);
+  const [m365ConnectBusy, setM365ConnectBusy] = React.useState(false);
   const [m365Email, setM365Email] = React.useState('');
+  const [m365ClientId, setM365ClientId] = React.useState('');
   const [m365Error, setM365Error] = React.useState('');
   const [m365TestBusy, setM365TestBusy] = React.useState(false);
   const [m365TestResult, setM365TestResult] = React.useState('');
@@ -1190,6 +1192,31 @@ export function SettingsPage() {
     }
   }
 
+  function graphTokenExpiry(expiresIn: number): string {
+    return new Date(Date.now() + Math.max(60, expiresIn - 120) * 1000).toISOString();
+  }
+
+  async function currentGraphAccessToken(): Promise<string> {
+    const graph = graphBridge();
+    if (!graph || !settings?.m365.clientId) throw new Error('Microsoft Graph is unavailable.');
+    const m365 = settings.m365;
+    if (m365.accessToken && m365.expiresAt && new Date(m365.expiresAt).getTime() > Date.now() + 60_000) {
+      return m365.accessToken;
+    }
+    if (!m365.refreshToken) throw new Error('Microsoft Graph refresh token is unavailable. Disconnect and reconnect.');
+    const token = await graph.refreshToken({ clientId: m365.clientId, refreshToken: m365.refreshToken });
+    const updated = await platform().system.updateSettings({
+      m365: {
+        ...m365,
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token ?? m365.refreshToken,
+        expiresAt: graphTokenExpiry(token.expires_in),
+      },
+    });
+    setSettings(updated);
+    return token.access_token;
+  }
+
   async function connectM365() {
     if (!/.+@.+\..+/.test(m365Email)) {
       setM365Error('Enter a valid Microsoft 365 mailbox address (e.g. privacy@contoso.com).');
@@ -1197,37 +1224,85 @@ export function SettingsPage() {
     }
     setM365Error('');
     setM365TestResult('');
+    setM365ConnectBusy(true);
 
     const email = m365Email.trim();
-    const isDesktop = !!workspaceBridge();
-    const outlook = outlookBridge();
-    if (isDesktop && outlook) {
+    const clientId = m365ClientId.trim();
+    const graph = graphBridge();
+
+    try {
+      if (clientId && graph) {
       try {
-        const accounts = await outlook.accounts();
-        const match = accounts.find((account) => account.email.toLowerCase() === email.toLowerCase());
-        if (accounts.length && !match) {
-          throw new Error(
-            `Outlook is available, but ${email} was not found in this Windows profile. Open Outlook with that mailbox first, then try again.`,
-          );
+        const device = await graph.startDeviceLogin({ clientId });
+        setM365TestResult(device.message || `Open ${device.verification_uri} and enter code ${device.user_code}.`);
+        const token = await graph.pollDeviceLogin({
+          clientId,
+          deviceCode: device.device_code,
+          interval: device.interval,
+          expiresIn: device.expires_in,
+        });
+        const profile = await graph.profile({ accessToken: token.access_token });
+        const signedInEmail = profile.mail || profile.userPrincipalName || email;
+        if (signedInEmail && signedInEmail.toLowerCase() !== email.toLowerCase()) {
+          throw new Error(`Signed in as ${signedInEmail}, but the mailbox field contains ${email}.`);
         }
+        const s = await platform().system.updateSettings({
+          m365: {
+            connected: true,
+            accountEmail: signedInEmail,
+            connectedAt: new Date().toISOString(),
+            connectedBy: user?.name,
+            mode: 'graph',
+            clientId,
+            accessToken: token.access_token,
+            refreshToken: token.refresh_token,
+            expiresAt: graphTokenExpiry(token.expires_in),
+          },
+        });
+        setSettings(s);
+        setConnecting(false);
+        setM365Email('');
+        setM365ClientId('');
+        setM365TestResult(`Microsoft Graph connected for ${signedInEmail}.`);
+        return;
       } catch (e) {
-        setM365Error(e instanceof Error ? e.message : 'Unable to read local Outlook accounts.');
+        const s = await platform().system.updateSettings({
+          m365: {
+            connected: true,
+            accountEmail: email,
+            connectedAt: new Date().toISOString(),
+            connectedBy: user?.name,
+            mode: 'mailto',
+            fallback: 'mailto',
+          },
+        });
+        setSettings(s);
+        setConnecting(false);
+        setM365Email('');
+        setM365ClientId('');
+        setM365Error(`Microsoft Graph sign-in did not complete, so PrivacyFlow connected mailto draft fallback instead: ${e instanceof Error ? e.message : 'Graph sign-in failed.'}`);
         return;
       }
-    }
+      }
 
-    const s = await platform().system.updateSettings({
-      m365: {
-        connected: true,
-        accountEmail: email,
-        connectedAt: new Date().toISOString(),
-        connectedBy: user?.name,
-        mode: isDesktop ? 'outlook' : 'simulated',
-      },
-    });
-    setSettings(s);
-    setConnecting(false);
-    setM365Email('');
+      const s = await platform().system.updateSettings({
+        m365: {
+          connected: true,
+          accountEmail: email,
+          connectedAt: new Date().toISOString(),
+          connectedBy: user?.name,
+          mode: graph ? 'mailto' : 'simulated',
+          fallback: graph ? 'mailto' : undefined,
+        },
+      });
+      setSettings(s);
+      setConnecting(false);
+      setM365Email('');
+      setM365ClientId('');
+      setM365TestResult(graph ? 'Connected mailto draft fallback. Microsoft Graph was skipped because no Application (client) ID was entered.' : 'Browser preview is in simulated mode.');
+    } finally {
+      setM365ConnectBusy(false);
+    }
   }
 
   async function disconnectM365() {
@@ -1245,12 +1320,24 @@ export function SettingsPage() {
       if (m365.mode === 'outlook') {
         const outlook = outlookBridge();
         if (outlook) {
-          await outlook.openDraft({
-            accountEmail: m365.accountEmail,
-            to: m365.accountEmail,
-            subject: `PrivacyFlow Outlook test (${new Date().toLocaleString()})`,
-            body: 'This is a PrivacyFlow local Outlook connection test.',
-          });
+          try {
+            await outlook.openDraft({
+              accountEmail: m365.accountEmail,
+              to: m365.accountEmail,
+              subject: `PrivacyFlow Outlook test (${new Date().toLocaleString()})`,
+              body: 'This is a PrivacyFlow local Outlook connection test.',
+            });
+          } catch {
+            const bridge = mailBridge();
+            if (!bridge) throw new Error('Outlook automation is blocked and mailto fallback is unavailable.');
+            await bridge.openDraft({
+              to: m365.accountEmail,
+              subject: `PrivacyFlow Outlook draft test (${new Date().toLocaleString()})`,
+              body: 'This is a PrivacyFlow Outlook draft connection test.',
+            });
+            setM365TestResult(`Outlook automation was blocked, so PrivacyFlow opened a mailto draft to ${m365.accountEmail}.`);
+            return;
+          }
         } else {
           const bridge = mailBridge();
           if (!bridge) throw new Error('Outlook draft bridge is unavailable.');
@@ -1262,7 +1349,26 @@ export function SettingsPage() {
         }
         setM365TestResult(`Opened a test draft to ${m365.accountEmail}.`);
       } else if (m365.mode === 'graph') {
-        setM365Error('This account was connected with the older Microsoft Graph method. Disconnect and reconnect to use local Outlook without admin consent.');
+        const graph = graphBridge();
+        if (!graph) throw new Error('Microsoft Graph bridge is unavailable.');
+        const accessToken = await currentGraphAccessToken();
+        await graph.sendMail({
+          accessToken,
+          to: m365.accountEmail,
+          subject: `PrivacyFlow Microsoft Graph test (${new Date().toLocaleString()})`,
+          body: 'This is a PrivacyFlow Microsoft Graph connection test.',
+          saveToSentItems: true,
+        });
+        setM365TestResult(`Sent a Microsoft Graph test email to ${m365.accountEmail}.`);
+      } else if (m365.mode === 'mailto') {
+        const bridge = mailBridge();
+        if (!bridge) throw new Error('Mailto draft fallback is unavailable.');
+        await bridge.openDraft({
+          to: m365.accountEmail,
+          subject: `PrivacyFlow mailto draft test (${new Date().toLocaleString()})`,
+          body: 'This is a PrivacyFlow mailto draft fallback test.',
+        });
+        setM365TestResult(`Opened a mailto draft to ${m365.accountEmail}.`);
       } else {
         setM365TestResult('Browser preview is in simulated mode. No email was sent.');
       }
@@ -1426,8 +1532,9 @@ export function SettingsPage() {
                   </p>
                   <p className="text-xs text-muted">
                     Connected {fmtDateTime(m365.connectedAt)}{m365.connectedBy ? ` by ${m365.connectedBy}` : ''}
-                    {m365.mode === 'graph' ? ' · Legacy Graph connection' : ''}
+                    {m365.mode === 'graph' ? ' · Microsoft Graph delegated send' : ''}
                     {m365.mode === 'outlook' ? ' · Local Outlook desktop drafts' : ''}
+                    {m365.mode === 'mailto' ? ' · Mailto draft fallback' : ''}
                     {m365.mode === 'simulated' ? ' · Simulated delivery (browser preview)' : ''}
                   </p>
                 </div>
@@ -1446,16 +1553,18 @@ export function SettingsPage() {
               {m365Error && <p className="text-xs text-red-400">{m365Error}</p>}
               <p className="text-xs text-muted">
                 {m365.mode === 'graph'
-                  ? 'This is an older Microsoft Graph connection. Disconnect and reconnect to use local Outlook without tenant admin approval.'
-                  : 'Automated requester emails open as Outlook drafts from this desktop app and are logged on the request Communications tab and audit trail.'}
+                  ? 'Automation sends email through Microsoft Graph using delegated user consent. If sending fails, PrivacyFlow falls back to opening a mailto draft.'
+                  : m365.mode === 'mailto'
+                    ? 'Automation opens mailto drafts with the default email app. Users review and send manually; PrivacyFlow logs the draft activity.'
+                    : 'Automated requester emails open as Outlook drafts from this desktop app and are logged on the request Communications tab and audit trail.'}
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted">
-                Connect a Microsoft 365 mailbox so automated template emails (request acknowledgements,
-                identity-verification requests, department search forwards, fulfilment notices) open as
-                Outlook drafts from the mailbox already configured on this PC.
+                Connect a Microsoft 365 mailbox so automated template emails can send with delegated
+                Microsoft Graph user consent. If Graph consent is blocked or skipped, PrivacyFlow uses
+                mailto draft fallback without PowerShell.
               </p>
 
               {!connecting ? (
@@ -1477,16 +1586,24 @@ export function SettingsPage() {
                       autoFocus
                     />
                   </Field>
+                  <Field label="Application (client) ID" hint="Optional. Enter a public-client Microsoft Entra app ID to try delegated Graph sign-in with Mail.Send. Leave blank to use mailto fallback.">
+                    <GlassInput
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      value={m365ClientId}
+                      onChange={(e) => setM365ClientId(e.target.value)}
+                    />
+                  </Field>
+                  {m365TestResult && <p className="text-xs text-emerald-300 whitespace-pre-wrap">{m365TestResult}</p>}
                   {m365Error && <p className="text-xs text-red-400">{m365Error}</p>}
                   <div className="flex items-start gap-2 rounded-xl bg-[var(--pf-highlight)] px-3 py-2">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
                     <p className="text-[11px] text-muted">
-                      In the packaged Windows app, Connect checks the mailbox configured in local Outlook and does not require a Microsoft Entra app registration or admin consent. Browser preview records simulated delivery only.
+                      Graph uses device-code sign-in and requests only openid, profile, User.Read, Mail.Send, and offline_access. If your tenant requires admin approval, PrivacyFlow connects the mailto fallback instead.
                     </p>
                   </div>
                   <div className="flex justify-end gap-2">
-                    <GlassButton onClick={() => { setConnecting(false); setM365Error(''); }}>Cancel</GlassButton>
-                    <GlassButton variant="primary" onClick={connectM365}>
+                    <GlassButton onClick={() => { setConnecting(false); setM365Error(''); setM365TestResult(''); }}>Cancel</GlassButton>
+                    <GlassButton variant="primary" loading={m365ConnectBusy} onClick={connectM365}>
                       <Link2 className="h-4 w-4" /> Connect
                     </GlassButton>
                   </div>

@@ -358,6 +358,8 @@ async function runAutomations(
   for (const rule of rules) {
     if (trigger === 'status.changed' && rule.toStatus && rule.toStatus !== ctx.toStatus) continue;
     if (trigger === 'case.updated' && rule.updateField && !ctx.changedFields?.includes(rule.updateField)) continue;
+    if (rule.requestType && !c.requestTypes.map(String).includes(rule.requestType)) continue;
+    if (rule.intakeChannel && c.intakeChannel !== rule.intakeChannel) continue;
     const tpl = (d.settings.emailTemplates ?? []).find((t) => t.id === rule.templateId);
     if (!tpl) continue;
 

@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type { OrgSettings, EmailTemplate, AutomationRule, AutomationRecipient } from '@shared/types';
-import { CASE_STATUSES } from '@shared/constants';
+import { CASE_STATUSES, INTAKE_CHANNELS, REQUEST_TYPES } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import {
   GlassPanel, GlassButton, GlassBadge, GlassInput, GlassSelect, GlassTextarea, Field, Spinner,
@@ -132,6 +132,13 @@ export function AutomationPage() {
     if (r.trigger === 'case.created') return 'When a request is created';
     if (r.trigger === 'case.updated') return r.updateField ? `When ${updateFieldLabel(r.updateField).toLowerCase()} changes` : 'When request details change';
     return `When status changes to ${r.toStatus ?? '-'}`;
+  };
+  const ruleConditionText = (r: AutomationRule) => {
+    const conditions = [
+      r.requestType ? `request type is ${r.requestType}` : '',
+      r.intakeChannel ? `intake channel is ${r.intakeChannel}` : '',
+    ].filter(Boolean);
+    return conditions.length ? `Only when ${conditions.join(' and ')}` : 'Applies to all requests';
   };
   const recipientNames = settings.automationRecipients.map((recipient) => recipient.name).filter(Boolean);
 
@@ -301,7 +308,9 @@ export function AutomationPage() {
               </GlassButton>
             )}
           </div>
-          <p className="mb-3 text-xs text-muted">Rules run saved email templates when requests are created, details change, or status changes are logged.</p>
+          <p className="mb-3 text-xs text-muted">
+            Rules run saved email templates when requests are created, details change, or status changes are logged. Add optional conditions to limit a rule to a request type or intake channel.
+          </p>
 
           <div className="flex flex-col gap-2">
             {settings.automationRules.map((r) => (
@@ -326,41 +335,76 @@ export function AutomationPage() {
                   {ruleTriggerText(r)}
                   {' '}send <span className="text-accent">{templateName(r.templateId)}</span>
                 </p>
+                <p className="mt-1 text-xs text-muted">{ruleConditionText(r)}</p>
                 {editable && (
-                  <div className="mt-3 grid gap-2 md:grid-cols-5">
-                    <GlassInput value={r.name} onChange={(e) => updateAutomationRule(r.id, { name: e.target.value })} />
-                    <GlassSelect
-                      value={r.trigger}
-                      onChange={(e) => {
-                        const trigger = e.target.value as AutomationRule['trigger'];
-                        updateAutomationRule(r.id, {
-                          trigger,
-                          updateField: trigger === 'case.updated' ? (r.updateField ?? '') : undefined,
-                          toStatus: trigger === 'status.changed' ? (r.toStatus ?? 'Email Response Sent') : undefined,
-                        });
-                      }}
-                    >
-                      <option value="case.created">On request created</option>
-                      <option value="case.updated">On request details changed</option>
-                      <option value="status.changed">On status change</option>
-                    </GlassSelect>
-                    {r.trigger === 'case.updated' ? (
-                      <GlassSelect value={r.updateField ?? ''} onChange={(e) => updateAutomationRule(r.id, { updateField: e.target.value })}>
-                        {UPDATE_FIELD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </GlassSelect>
-                    ) : (
-                      <div />
-                    )}
-                    {r.trigger === 'status.changed' ? (
-                      <GlassSelect value={String(r.toStatus ?? 'Email Response Sent')} onChange={(e) => updateAutomationRule(r.id, { toStatus: e.target.value })}>
-                        {CASE_STATUSES.map((s) => <option key={s}>{s}</option>)}
-                      </GlassSelect>
-                    ) : (
-                      <div />
-                    )}
-                    <GlassSelect value={r.templateId} onChange={(e) => updateAutomationRule(r.id, { templateId: e.target.value })}>
-                      {settings.emailTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </GlassSelect>
+                  <div className="mt-3 flex flex-col gap-3 rounded-xl border border-line/70 bg-[var(--pf-surface)] p-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Field label="Rule name">
+                        <GlassInput value={r.name} onChange={(e) => updateAutomationRule(r.id, { name: e.target.value })} />
+                      </Field>
+                      <Field label="Send template">
+                        <GlassSelect value={r.templateId} onChange={(e) => updateAutomationRule(r.id, { templateId: e.target.value })}>
+                          {settings.emailTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </GlassSelect>
+                      </Field>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <Field label="Run when">
+                        <GlassSelect
+                          value={r.trigger}
+                          onChange={(e) => {
+                            const trigger = e.target.value as AutomationRule['trigger'];
+                            updateAutomationRule(r.id, {
+                              trigger,
+                              updateField: trigger === 'case.updated' ? (r.updateField ?? '') : undefined,
+                              toStatus: trigger === 'status.changed' ? (r.toStatus ?? 'Email Response Sent') : undefined,
+                            });
+                          }}
+                        >
+                          <option value="case.created">Request created</option>
+                          <option value="case.updated">Request detail changes</option>
+                          <option value="status.changed">Status changes</option>
+                        </GlassSelect>
+                      </Field>
+                      {r.trigger === 'case.updated' ? (
+                        <Field label="Changed field">
+                          <GlassSelect value={r.updateField ?? ''} onChange={(e) => updateAutomationRule(r.id, { updateField: e.target.value })}>
+                            {UPDATE_FIELD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </GlassSelect>
+                        </Field>
+                      ) : (
+                        <Field label="Changed field">
+                          <GlassInput value="Not used for this trigger" disabled />
+                        </Field>
+                      )}
+                      {r.trigger === 'status.changed' ? (
+                        <Field label="Status">
+                          <GlassSelect value={String(r.toStatus ?? 'Email Response Sent')} onChange={(e) => updateAutomationRule(r.id, { toStatus: e.target.value })}>
+                            {CASE_STATUSES.map((s) => <option key={s}>{s}</option>)}
+                          </GlassSelect>
+                        </Field>
+                      ) : (
+                        <Field label="Status">
+                          <GlassInput value="Not used for this trigger" disabled />
+                        </Field>
+                      )}
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Field label="Request type condition">
+                        <GlassSelect value={r.requestType ?? ''} onChange={(e) => updateAutomationRule(r.id, { requestType: e.target.value || undefined })}>
+                          <option value="">Any request type</option>
+                          {REQUEST_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                        </GlassSelect>
+                      </Field>
+                      <Field label="Intake channel condition">
+                        <GlassSelect value={r.intakeChannel ?? ''} onChange={(e) => updateAutomationRule(r.id, { intakeChannel: e.target.value || undefined })}>
+                          <option value="">Any intake channel</option>
+                          {INTAKE_CHANNELS.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+                        </GlassSelect>
+                      </Field>
+                    </div>
                   </div>
                 )}
               </div>

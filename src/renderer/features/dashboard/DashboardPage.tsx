@@ -52,12 +52,13 @@ export function DashboardPage() {
   if (!metrics || !cases || !projects) return <Spinner label="Loading dashboard…" />;
 
   const recent = [...cases]
-    .sort((a, b) => b.sla.receivedDate.localeCompare(a.sla.receivedDate))
-    .slice(0, 4);
+    .sort((a, b) => b.sla.receivedDate.localeCompare(a.sla.receivedDate));
 
   const recentProjects = [...projects]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 4);
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const recentActivity = [...cases]
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 
   return (
     <div>
@@ -98,7 +99,7 @@ export function DashboardPage() {
           {recent.length === 0 ? (
             <EmptyState title="No requests yet" description="Logged requests will appear here." icon={<Inbox className="h-6 w-6" />} />
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex max-h-[242px] flex-col gap-2 overflow-y-auto pr-1">
               {recent.map((c) => (
                 <button
                   key={c.id}
@@ -126,7 +127,7 @@ export function DashboardPage() {
           {recentProjects.length === 0 ? (
             <EmptyState title="No projects yet" description="Logged projects will appear here." icon={<FolderPlus className="h-6 w-6" />} />
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex max-h-[242px] flex-col gap-2 overflow-y-auto pr-1">
               {recentProjects.map((p) => (
                 <button
                   key={p.id}
@@ -151,8 +152,8 @@ export function DashboardPage() {
 
       <GlassPanel className="mt-4">
         <h3 className="mb-3 text-sm font-semibold text-ink">Recent activity</h3>
-        <div className="flex flex-col gap-1.5">
-          {cases.slice(0, 5).map((c) => (
+        <div className="flex max-h-[210px] flex-col gap-1.5 overflow-y-auto pr-1">
+          {recentActivity.map((c) => (
             <div key={c.id} className="flex items-center gap-3 py-1.5 text-sm">
               <GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge>
               <button className="text-accent focus-ring" onClick={() => navigate(`/cases/${c.id}`)}>{c.caseNumber}</button>

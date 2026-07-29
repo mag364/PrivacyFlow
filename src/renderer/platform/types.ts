@@ -75,6 +75,20 @@ export interface CompleteSetupInput {
   demoDataInstalled?: boolean;
 }
 
+export interface ImportSummary {
+  cases: number;
+  projects: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface TrackingExport {
+  version: string;
+  exportedAt: string;
+  cases: DsrCase[];
+  projects: Project[];
+}
+
 export interface LoginResult {
   ok: boolean;
   user?: User;
@@ -125,6 +139,10 @@ export interface PrivacyFlowAPI {
     completeSetup: (input: CompleteSetupInput) => Promise<OrgSettings>;
     updateSettings: (patch: Partial<OrgSettings>) => Promise<OrgSettings>;
     resetApplication: () => Promise<void>;
+    exportTracking: () => Promise<TrackingExport>;
+    importTracking: (input: { cases?: DsrCase[]; projects?: Project[] }) => Promise<ImportSummary>;
+    importCases: (input: NewCaseInput[]) => Promise<ImportSummary>;
+    importProjects: (input: NewProjectInput[]) => Promise<ImportSummary>;
   };
 
   auth: {

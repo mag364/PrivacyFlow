@@ -4,6 +4,7 @@ import {
   Save, RotateCcw, Check, Mail, Link2, Unlink, ShieldCheck, Info, UserCog, UserPlus,
   KeyRound, Copy, HardDrive, FolderOpen, Lock, Pencil, Palette, Building2, Plug,
   Database, Trash2, RefreshCw, Download, ExternalLink, AlertTriangle, PackageCheck,
+  Upload, FileJson,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { platform } from '../../platform';
@@ -20,14 +21,19 @@ import {
   outlookBridge, mailBridge,
 } from '../../platform/workspace';
 import { APP_CONFIG } from '@shared/config';
+import type { ImportSummary } from '../../platform/types';
+import {
+  caseInputFromRow, privacyFlowPayloadFromJson, projectInputFromRow, rowsFromFile,
+} from '../../lib/importers';
 
-type TabKey = 'workspace' | 'appearance' | 'organization' | 'integrations' | 'users';
+type TabKey = 'workspace' | 'appearance' | 'organization' | 'integrations' | 'import_export' | 'users';
 
 const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: 'workspace', label: 'Workspace', icon: HardDrive },
   { key: 'appearance', label: 'Appearance', icon: Palette },
   { key: 'organization', label: 'Organization', icon: Building2 },
   { key: 'integrations', label: 'Integrations', icon: Plug },
+  { key: 'import_export', label: 'Import & Export', icon: Upload },
   { key: 'users', label: 'Users', icon: UserCog },
 ];
 
@@ -551,6 +557,184 @@ function WorkspaceTab() {
   );
 }
 
+function downloadJson(filename: string, data: unknown): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ImportExportTab() {
+  const [busy, setBusy] = React.useState('');
+  const [result, setResult] = React.useState('');
+  const [error, setError] = React.useState('');
+  const requestRef = React.useRef<HTMLInputElement>(null);
+  const projectRef = React.useRef<HTMLInputElement>(null);
+  const privacyRef = React.useRef<HTMLInputElement>(null);
+  const editable = can(useAuth.getState().user?.role, 'settings.manage');
+
+  function summaryText(summary: ImportSummary): string {
+    const bits = [
+      summary.cases ? `${summary.cases} request${summary.cases === 1 ? '' : 's'}` : '',
+      summary.projects ? `${summary.projects} project${summary.projects === 1 ? '' : 's'}` : '',
+      summary.skipped ? `${summary.skipped} duplicate${summary.skipped === 1 ? '' : 's'} skipped` : '',
+    ].filter(Boolean);
+    const base = bits.length ? bits.join(' · ') : 'No records imported.';
+    return summary.errors.length ? `${base} · ${summary.errors.length} error${summary.errors.length === 1 ? '' : 's'}` : base;
+  }
+
+  async function exportTracking() {
+    setBusy('export');
+    setError('');
+    try {
+      const data = await platform().system.exportTracking();
+      downloadJson(`privacyflow-tracking-${new Date().toISOString().slice(0, 10)}.json`, data);
+      setResult(`Exported ${data.cases.length} request${data.cases.length === 1 ? '' : 's'} and ${data.projects.length} project${data.projects.length === 1 ? '' : 's'}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to export tracking data.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function importRequests(file: File) {
+    setBusy('requests');
+    setError('');
+    setResult('');
+    try {
+      const settings = await platform().system.settings();
+      const rows = await rowsFromFile(file);
+      const inputs = rows.map((row) => caseInputFromRow(row, { jurisdiction: settings.defaultJurisdiction }));
+      const summary = await platform().system.importCases(inputs);
+      setResult(`Request import complete: ${summaryText(summary)}.`);
+      if (summary.errors.length) setError(summary.errors.slice(0, 5).join('\n'));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to import requests.');
+    } finally {
+      setBusy('');
+      if (requestRef.current) requestRef.current.value = '';
+    }
+  }
+
+  async function importProjects(file: File) {
+    setBusy('projects');
+    setError('');
+    setResult('');
+    try {
+      const rows = await rowsFromFile(file);
+      const inputs = rows.map(projectInputFromRow);
+      const summary = await platform().system.importProjects(inputs);
+      setResult(`Project import complete: ${summaryText(summary)}.`);
+      if (summary.errors.length) setError(summary.errors.slice(0, 5).join('\n'));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to import projects.');
+    } finally {
+      setBusy('');
+      if (projectRef.current) projectRef.current.value = '';
+    }
+  }
+
+  async function importPrivacyFlow(file: File) {
+    setBusy('privacyflow');
+    setError('');
+    setResult('');
+    try {
+      const payload = privacyFlowPayloadFromJson(await file.text());
+      const summary = await platform().system.importTracking(payload);
+      setResult(`PrivacyFlow import complete: ${summaryText(summary)}.`);
+      if (summary.errors.length) setError(summary.errors.slice(0, 5).join('\n'));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to import PrivacyFlow data.');
+    } finally {
+      setBusy('');
+      if (privacyRef.current) privacyRef.current.value = '';
+    }
+  }
+
+  return (
+    <GlassPanel>
+      <div className="mb-4 flex items-center gap-2">
+        <Upload className="h-4 w-4 text-accent" />
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Import &amp; Export</h3>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Database className="h-4 w-4 text-accent" />
+            <p className="text-sm font-semibold text-ink">Requests</p>
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Import Smartsheet or Excel exports as CSV, TSV, or .xlsx. Recognized columns include Request, Request ID, Subject, Email, Types, Status, Jurisdiction, Date Received, and Description.
+          </p>
+          <input
+            ref={requestRef}
+            type="file"
+            accept=".csv,.tsv,.txt,.xlsx"
+            className="hidden"
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) void importRequests(file); }}
+          />
+          <GlassButton disabled={!editable || !!busy} loading={busy === 'requests'} onClick={() => requestRef.current?.click()}>
+            <Upload className="h-4 w-4" /> Import requests
+          </GlassButton>
+        </div>
+
+        <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <FolderOpen className="h-4 w-4 text-accent" />
+            <p className="text-sm font-semibold text-ink">Projects</p>
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Import project trackers from CSV, TSV, or .xlsx. Recognized columns include Project Number, Project Name, Status, Source, RITM Number, Investment Class, Fiscal Year, PIA Number, and Description.
+          </p>
+          <input
+            ref={projectRef}
+            type="file"
+            accept=".csv,.tsv,.txt,.xlsx"
+            className="hidden"
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) void importProjects(file); }}
+          />
+          <GlassButton disabled={!editable || !!busy} loading={busy === 'projects'} onClick={() => projectRef.current?.click()}>
+            <Upload className="h-4 w-4" /> Import projects
+          </GlassButton>
+        </div>
+
+        <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <FileJson className="h-4 w-4 text-accent" />
+            <p className="text-sm font-semibold text-ink">PrivacyFlow transfer</p>
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Export requests and projects to a PrivacyFlow JSON transfer file, or import a transfer/privacyflow.db.json file from another PrivacyFlow workspace.
+          </p>
+          <input
+            ref={privacyRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) void importPrivacyFlow(file); }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <GlassButton disabled={!!busy} loading={busy === 'export'} onClick={exportTracking}>
+              <Download className="h-4 w-4" /> Export JSON
+            </GlassButton>
+            <GlassButton disabled={!editable || !!busy} loading={busy === 'privacyflow'} onClick={() => privacyRef.current?.click()}>
+              <Upload className="h-4 w-4" /> Import JSON
+            </GlassButton>
+          </div>
+        </div>
+      </div>
+
+      {!editable && <p className="mt-3 text-xs text-muted">Only administrators and privacy managers can import records.</p>}
+      {result && <p className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{result}</p>}
+      {error && <p className="mt-4 whitespace-pre-line rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
+    </GlassPanel>
+  );
+}
+
 export function SettingsPage() {
   const theme = useTheme();
   const { user, init } = useAuth();
@@ -980,6 +1164,8 @@ export function SettingsPage() {
           )}
         </GlassPanel>
       )}
+
+      {tab === 'import_export' && <ImportExportTab />}
 
       {tab === 'users' && (
         <GlassPanel>

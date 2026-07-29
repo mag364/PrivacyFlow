@@ -12,7 +12,7 @@ import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared
 import type {
   PrivacyFlowAPI, DashboardMetrics, NewCaseInput, NewProjectInput, CompleteSetupInput,
   LoginResult, NameValue, CreateUserInput, CreateUserResult, UpdateUserInput,
-  AddDocumentInput, AddCommunicationInput,
+  AddDocumentInput, AddCommunicationInput, ImportSummary,
 } from './types';
 import {
   type Db, appendAudit, createSeed, nextActionFor, nextCaseNumber, nextProjectNumber,
@@ -629,6 +629,94 @@ function assertRitmUnique(d: Db, ritmNumber: string | undefined, excludeId?: str
   }
 }
 
+async function addImportedCase(
+  d: Db,
+  input: NewCaseInput,
+  actor: User | null,
+  status: CaseStatus = 'New',
+): Promise<DsrCase> {
+  const now = new Date();
+  const rule = ruleFor(d.settings, String(input.jurisdiction));
+  const due = computeDueDate(now, { periodDays: rule.periodDays, businessDays: rule.businessDays });
+  const caseNumber = input.caseNumberOverride?.trim() || nextCaseNumber(d);
+  const c: DsrCase = {
+    id: uid(),
+    caseNumber,
+    status,
+    requestTypes: input.requestTypes,
+    intakeChannel: input.intakeChannel,
+    description: input.description,
+    jurisdiction: input.jurisdiction,
+    businessUnit: input.businessUnit,
+    priority: input.priority,
+    risk: input.risk,
+    ownerId: input.ownerId,
+    team: 'Privacy Office',
+    tags: [],
+    subject: input.subject,
+    verificationStatus: 'Not Started',
+    sla: {
+      receivedDate: now.toISOString(),
+      originalDueDate: due.toISOString(),
+      currentDueDate: due.toISOString(),
+      pausedTotalDays: 0,
+      ruleName: rule.jurisdiction,
+      businessDays: rule.businessDays,
+      periodDays: rule.periodDays,
+      closureDate: OPEN_STATUSES.includes(status) ? undefined : now.toISOString(),
+    },
+    demo: false,
+    createdBy: actor?.id ?? 'system',
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    lastActivityAt: now.toISOString(),
+    nextAction: nextActionFor(status),
+    intakeDates: input.intakeDates,
+  };
+  d.cases.push(c);
+  d.statusHistory.push({ id: uid(), caseId: c.id, fromStatus: null, toStatus: status, actorId: actor?.id ?? 'system', at: now.toISOString() });
+  ['Send standard response', 'Forward email to Ron K.', 'Send follow-up email', 'Close the request'].forEach((title, i) => {
+    d.tasks.push({
+      id: uid(), caseId: c.id, title, status: 'Not Started', priority: input.priority,
+      dueDate: addDays(now, 7 * (i + 1)).toISOString(), checklistGroup: 'Standard workflow',
+      createdBy: actor?.id ?? 'system', createdAt: now.toISOString(),
+    });
+  });
+  await appendAudit(d, actor, {
+    category: 'Case',
+    action: 'case.imported',
+    entityType: 'case',
+    entityId: c.id,
+    caseId: c.id,
+    summary: `Case ${c.caseNumber} imported (${c.requestTypes.join(', ')})`,
+    newValue: { status: c.status, jurisdiction: c.jurisdiction },
+  });
+  return c;
+}
+
+async function addImportedProject(d: Db, input: NewProjectInput, actor: User | null): Promise<Project> {
+  const now = new Date().toISOString();
+  assertRitmUnique(d, input.ritmNumber);
+  const p: Project = {
+    ...input,
+    status: input.status ?? 'New',
+    projectNumber: input.projectNumber?.trim() || nextProjectNumber(d),
+    id: uid(),
+    createdBy: actor?.id ?? 'system',
+    createdAt: now,
+  };
+  d.projects.push(p);
+  await appendAudit(d, actor, {
+    category: 'Project',
+    action: 'project.imported',
+    entityType: 'project',
+    entityId: p.id,
+    summary: `Project ${p.projectNumber} — ${p.projectName} imported`,
+    newValue: { projectNumber: p.projectNumber, status: p.status, source: p.source, investmentClass: p.investmentClass, ritmNumber: p.ritmNumber },
+  });
+  return p;
+}
+
 export function createBrowserPlatform(): PrivacyFlowAPI {
   return {
     isElectron: !!workspaceBridge(),
@@ -675,6 +763,107 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         assertWritable();
         const fresh = await createSeed(defaultSettings());
         save(fresh);
+      },
+      async exportTracking() {
+        const d = db();
+        return {
+          version: APP_CONFIG.version,
+          exportedAt: new Date().toISOString(),
+          cases: clone(d.cases),
+          projects: clone(d.projects),
+        };
+      },
+      async importCases(input: NewCaseInput[]): Promise<ImportSummary> {
+        assertWritable();
+        const d = db();
+        const actor = actorOf(d);
+        const summary: ImportSummary = { cases: 0, projects: 0, skipped: 0, errors: [] };
+        const existing = new Set(d.cases.map((c) => c.caseNumber.trim().toLowerCase()));
+        for (const [index, item] of input.entries()) {
+          try {
+            const explicit = item.caseNumberOverride?.trim();
+            if (explicit && existing.has(explicit.toLowerCase())) {
+              summary.skipped += 1;
+              continue;
+            }
+            const created = await addImportedCase(d, item, actor);
+            existing.add(created.caseNumber.trim().toLowerCase());
+            summary.cases += 1;
+          } catch (e) {
+            summary.errors.push(`Request row ${index + 1}: ${e instanceof Error ? e.message : 'Import failed.'}`);
+          }
+        }
+        save(d);
+        return summary;
+      },
+      async importProjects(input: NewProjectInput[]): Promise<ImportSummary> {
+        assertWritable();
+        const d = db();
+        const actor = actorOf(d);
+        const summary: ImportSummary = { cases: 0, projects: 0, skipped: 0, errors: [] };
+        for (const [index, item] of input.entries()) {
+          try {
+            if (item.ritmNumber?.trim() && d.projects.some((p) => p.ritmNumber?.trim().toLowerCase() === item.ritmNumber!.trim().toLowerCase())) {
+              summary.skipped += 1;
+              continue;
+            }
+            await addImportedProject(d, item, actor);
+            summary.projects += 1;
+          } catch (e) {
+            summary.errors.push(`Project row ${index + 1}: ${e instanceof Error ? e.message : 'Import failed.'}`);
+          }
+        }
+        save(d);
+        return summary;
+      },
+      async importTracking(input: { cases?: DsrCase[]; projects?: Project[] }): Promise<ImportSummary> {
+        assertWritable();
+        const d = db();
+        const actor = actorOf(d);
+        const summary: ImportSummary = { cases: 0, projects: 0, skipped: 0, errors: [] };
+        const existingCases = new Set(d.cases.map((c) => c.caseNumber.trim().toLowerCase()));
+        for (const [index, c] of (input.cases ?? []).entries()) {
+          try {
+            if (existingCases.has(c.caseNumber.trim().toLowerCase())) {
+              summary.skipped += 1;
+              continue;
+            }
+            const imported = await addImportedCase(d, {
+              caseNumberOverride: c.caseNumber,
+              requestTypes: c.requestTypes,
+              intakeChannel: c.intakeChannel,
+              jurisdiction: c.jurisdiction,
+              priority: c.priority,
+              risk: c.risk,
+              businessUnit: c.businessUnit,
+              description: c.description,
+              subject: c.subject,
+              intakeDates: c.intakeDates,
+            }, actor, CASE_STATUSES.includes(c.status as CaseStatus) ? c.status as CaseStatus : 'New');
+            existingCases.add(imported.caseNumber.trim().toLowerCase());
+            summary.cases += 1;
+          } catch (e) {
+            summary.errors.push(`PrivacyFlow request ${index + 1}: ${e instanceof Error ? e.message : 'Import failed.'}`);
+          }
+        }
+        for (const [index, p] of (input.projects ?? []).entries()) {
+          try {
+            if (p.ritmNumber?.trim() && d.projects.some((x) => x.ritmNumber?.trim().toLowerCase() === p.ritmNumber!.trim().toLowerCase())) {
+              summary.skipped += 1;
+              continue;
+            }
+            await addImportedProject(d, {
+              ...p,
+              projectNumber: p.projectNumber,
+              status: PROJECT_STATUSES.includes(p.status as ProjectStatus) ? p.status : 'New',
+            }, actor);
+            summary.projects += 1;
+          } catch (e) {
+            summary.errors.push(`PrivacyFlow project ${index + 1}: ${e instanceof Error ? e.message : 'Import failed.'}`);
+          }
+        }
+        save(d);
+        return summary;
       },
     },
 

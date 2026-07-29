@@ -270,7 +270,7 @@ export function AutomationPage() {
               </GlassButton>
             )}
           </div>
-          <p className="mb-3 text-xs text-muted">Rules run saved email templates when request status changes are logged.</p>
+          <p className="mb-3 text-xs text-muted">Rules run saved email templates when requests are created, details change, or status changes are logged.</p>
 
           <div className="flex flex-col gap-2">
             {settings.automationRules.map((r) => (
@@ -292,7 +292,11 @@ export function AutomationPage() {
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  {r.trigger === 'case.created' ? 'When a request is created' : `When status changes to ${r.toStatus ?? '-'}`}
+                  {r.trigger === 'case.created'
+                    ? 'When a request is created'
+                    : r.trigger === 'case.updated'
+                      ? 'When request details change'
+                      : `When status changes to ${r.toStatus ?? '-'}`}
                   {' '}send <span className="text-accent">{templateName(r.templateId)}</span>
                 </p>
                 {editable && (
@@ -300,6 +304,7 @@ export function AutomationPage() {
                     <GlassInput value={r.name} onChange={(e) => updateAutomationRule(r.id, { name: e.target.value })} />
                     <GlassSelect value={r.trigger} onChange={(e) => updateAutomationRule(r.id, { trigger: e.target.value as AutomationRule['trigger'] })}>
                       <option value="case.created">On request created</option>
+                      <option value="case.updated">On request details changed</option>
                       <option value="status.changed">On status change</option>
                     </GlassSelect>
                     {r.trigger === 'status.changed' ? (

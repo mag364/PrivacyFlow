@@ -282,7 +282,7 @@ export interface AutomationRecipient {
   enabled: boolean;
 }
 
-export type AutomationTrigger = 'case.created' | 'status.changed';
+export type AutomationTrigger = 'case.created' | 'case.updated' | 'status.changed';
 
 export interface AutomationRule {
   id: string;

@@ -1211,6 +1211,24 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           newValue: clone(c),
           reason,
         });
+        if (changed) {
+          await runAutomations(d, c, 'case.updated', {});
+          const hadStandardResponse = !!before.intakeDates?.standardResponseSent;
+          const hasStandardResponse = !!c.intakeDates?.standardResponseSent;
+          const hadForwardedToRon = !!before.intakeDates?.forwardedEmailToRon;
+          const hasForwardedToRon = !!c.intakeDates?.forwardedEmailToRon;
+          const hadFollowUp = !!before.intakeDates?.followUpEmailSent;
+          const hasFollowUp = !!c.intakeDates?.followUpEmailSent;
+          if (!hadStandardResponse && hasStandardResponse) {
+            await runAutomations(d, c, 'status.changed', { toStatus: 'Email Response Sent' });
+          }
+          if (!hadForwardedToRon && hasForwardedToRon) {
+            await runAutomations(d, c, 'status.changed', { toStatus: 'Email Ron K.' });
+          }
+          if (!hadFollowUp && hasFollowUp) {
+            await runAutomations(d, c, 'status.changed', { toStatus: 'Follow-up Email Sent' });
+          }
+        }
         save(d);
         return clone(c);
       },

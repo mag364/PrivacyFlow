@@ -288,6 +288,7 @@ export interface AutomationRule {
   id: string;
   name: string;
   trigger: AutomationTrigger;
+  updateField?: string;
   toStatus?: CaseStatus | string;
   templateId: string;
   enabled: boolean;

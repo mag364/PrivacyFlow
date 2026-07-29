@@ -20,7 +20,26 @@ const PLACEHOLDERS = [
   '{{case.receivedDate}}', '{{org.name}}', '{{rule.department}}',
 ];
 
-type Tab = 'emails' | 'recipients';
+const UPDATE_FIELD_OPTIONS = [
+  ['', 'Any changed field'],
+  ['requestTypes', 'Request types'],
+  ['intakeChannel', 'Intake channel'],
+  ['description', 'Description'],
+  ['subject.identifiers.Request ID', 'Request ID'],
+  ['subject.lastName', 'Last name'],
+  ['subject.emails', 'Email'],
+  ['subject.relationship', 'Relationship'],
+  ['subject.clientCenterStatus', 'Client Center Status'],
+  ['subject.emailedFA', 'Emailed FA'],
+  ['intakeDates.dateClientServiceReceivedEmail', "Client Svcs. rec'd email"],
+  ['intakeDates.dateDppReceivedEmail', "DPP rec'd email from Client Svcs."],
+  ['intakeDates.standardResponseSent', 'Standard Response Sent'],
+  ['intakeDates.forwardedEmailToRon', 'Forwarded email to Ron K.'],
+  ['intakeDates.followUpEmailSent', 'Follow-up sent'],
+  ['sla.closureDate', 'Closed'],
+] as const;
+
+type Tab = 'emails' | 'rules' | 'recipients';
 
 export function AutomationPage() {
   const { user } = useAuth();
@@ -107,6 +126,13 @@ export function AutomationPage() {
   }
 
   const templateName = (id: string) => settings.emailTemplates.find((t) => t.id === id)?.name ?? '-';
+  const updateFieldLabel = (field?: string) =>
+    UPDATE_FIELD_OPTIONS.find(([value]) => value === (field ?? ''))?.[1] ?? field ?? 'Any changed field';
+  const ruleTriggerText = (r: AutomationRule) => {
+    if (r.trigger === 'case.created') return 'When a request is created';
+    if (r.trigger === 'case.updated') return r.updateField ? `When ${updateFieldLabel(r.updateField).toLowerCase()} changes` : 'When request details change';
+    return `When status changes to ${r.toStatus ?? '-'}`;
+  };
   const recipientNames = settings.automationRecipients.map((recipient) => recipient.name).filter(Boolean);
 
   return (
@@ -133,6 +159,7 @@ export function AutomationPage() {
       <div className="mb-4 flex gap-1 border-b border-line pb-2">
         {([
           ['emails', 'Email automation', Mail],
+          ['rules', 'Rules', Zap],
           ['recipients', 'Recipients', Users],
         ] as const).map(([key, label, Icon]) => (
           <button
@@ -148,7 +175,7 @@ export function AutomationPage() {
       </div>
 
       {tab === 'emails' && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4">
           <GlassPanel>
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -258,7 +285,11 @@ export function AutomationPage() {
           )}
           </GlassPanel>
 
-          <GlassPanel>
+        </div>
+      )}
+
+      {tab === 'rules' && (
+        <GlassPanel>
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-accent" />
@@ -292,21 +323,34 @@ export function AutomationPage() {
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  {r.trigger === 'case.created'
-                    ? 'When a request is created'
-                    : r.trigger === 'case.updated'
-                      ? 'When request details change'
-                      : `When status changes to ${r.toStatus ?? '-'}`}
+                  {ruleTriggerText(r)}
                   {' '}send <span className="text-accent">{templateName(r.templateId)}</span>
                 </p>
                 {editable && (
-                  <div className="mt-3 grid gap-2 md:grid-cols-4">
+                  <div className="mt-3 grid gap-2 md:grid-cols-5">
                     <GlassInput value={r.name} onChange={(e) => updateAutomationRule(r.id, { name: e.target.value })} />
-                    <GlassSelect value={r.trigger} onChange={(e) => updateAutomationRule(r.id, { trigger: e.target.value as AutomationRule['trigger'] })}>
+                    <GlassSelect
+                      value={r.trigger}
+                      onChange={(e) => {
+                        const trigger = e.target.value as AutomationRule['trigger'];
+                        updateAutomationRule(r.id, {
+                          trigger,
+                          updateField: trigger === 'case.updated' ? (r.updateField ?? '') : undefined,
+                          toStatus: trigger === 'status.changed' ? (r.toStatus ?? 'Email Response Sent') : undefined,
+                        });
+                      }}
+                    >
                       <option value="case.created">On request created</option>
                       <option value="case.updated">On request details changed</option>
                       <option value="status.changed">On status change</option>
                     </GlassSelect>
+                    {r.trigger === 'case.updated' ? (
+                      <GlassSelect value={r.updateField ?? ''} onChange={(e) => updateAutomationRule(r.id, { updateField: e.target.value })}>
+                        {UPDATE_FIELD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </GlassSelect>
+                    ) : (
+                      <div />
+                    )}
                     {r.trigger === 'status.changed' ? (
                       <GlassSelect value={String(r.toStatus ?? 'Email Response Sent')} onChange={(e) => updateAutomationRule(r.id, { toStatus: e.target.value })}>
                         {CASE_STATUSES.map((s) => <option key={s}>{s}</option>)}
@@ -325,8 +369,7 @@ export function AutomationPage() {
               <p className="py-6 text-center text-sm text-muted">No rules yet. Rules send templates automatically when their trigger fires.</p>
             )}
           </div>
-          </GlassPanel>
-        </div>
+        </GlassPanel>
       )}
 
       {tab === 'recipients' && (

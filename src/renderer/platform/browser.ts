@@ -253,6 +253,35 @@ function diffSummary(before: Record<string, unknown>, after: Record<string, unkn
   return changes.length > MAX ? `${shown}; +${changes.length - MAX} more` : shown;
 }
 
+function hasChanged(before: unknown, after: unknown): boolean {
+  return JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
+}
+
+function requestIdForCase(c: DsrCase): string {
+  return c.subject.identifiers.find((identifier) => identifier.label === 'Request ID')?.value ?? '';
+}
+
+function changedAutomationFields(before: DsrCase, after: DsrCase): string[] {
+  const checks: Array<[string, unknown, unknown]> = [
+    ['requestTypes', before.requestTypes, after.requestTypes],
+    ['intakeChannel', before.intakeChannel, after.intakeChannel],
+    ['description', before.description, after.description],
+    ['subject.identifiers.Request ID', requestIdForCase(before), requestIdForCase(after)],
+    ['subject.lastName', before.subject.lastName, after.subject.lastName],
+    ['subject.emails', before.subject.emails, after.subject.emails],
+    ['subject.relationship', before.subject.relationship, after.subject.relationship],
+    ['subject.clientCenterStatus', before.subject.clientCenterStatus, after.subject.clientCenterStatus],
+    ['subject.emailedFA', before.subject.emailedFA, after.subject.emailedFA],
+    ['intakeDates.dateClientServiceReceivedEmail', before.intakeDates?.dateClientServiceReceivedEmail, after.intakeDates?.dateClientServiceReceivedEmail],
+    ['intakeDates.dateDppReceivedEmail', before.intakeDates?.dateDppReceivedEmail, after.intakeDates?.dateDppReceivedEmail],
+    ['intakeDates.standardResponseSent', before.intakeDates?.standardResponseSent, after.intakeDates?.standardResponseSent],
+    ['intakeDates.forwardedEmailToRon', before.intakeDates?.forwardedEmailToRon, after.intakeDates?.forwardedEmailToRon],
+    ['intakeDates.followUpEmailSent', before.intakeDates?.followUpEmailSent, after.intakeDates?.followUpEmailSent],
+    ['sla.closureDate', before.sla?.closureDate, after.sla?.closureDate],
+  ];
+  return checks.filter(([, beforeValue, afterValue]) => hasChanged(beforeValue, afterValue)).map(([field]) => field);
+}
+
 // ---- Email automation engine -------------------------------------------------
 
 const DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -317,7 +346,7 @@ async function runAutomations(
   d: Db,
   c: DsrCase,
   trigger: AutomationTrigger,
-  ctx: { toStatus?: string },
+  ctx: { toStatus?: string; changedFields?: string[] },
 ): Promise<void> {
   const rules = (d.settings.automationRules ?? []).filter((r) => r.enabled && r.trigger === trigger);
   if (!rules.length) return;
@@ -328,6 +357,7 @@ async function runAutomations(
 
   for (const rule of rules) {
     if (trigger === 'status.changed' && rule.toStatus && rule.toStatus !== ctx.toStatus) continue;
+    if (trigger === 'case.updated' && rule.updateField && !ctx.changedFields?.includes(rule.updateField)) continue;
     const tpl = (d.settings.emailTemplates ?? []).find((t) => t.id === rule.templateId);
     if (!tpl) continue;
 
@@ -1212,7 +1242,8 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           reason,
         });
         if (changed) {
-          await runAutomations(d, c, 'case.updated', {});
+          const automationFields = changedAutomationFields(before, c);
+          await runAutomations(d, c, 'case.updated', { changedFields: automationFields });
           const hadStandardResponse = !!before.intakeDates?.standardResponseSent;
           const hasStandardResponse = !!c.intakeDates?.standardResponseSent;
           const hadForwardedToRon = !!before.intakeDates?.forwardedEmailToRon;

@@ -1244,9 +1244,12 @@ export function SettingsPage() {
   }
 
   async function resetUserPassword(target: User) {
+    const isSelfReset = target.id === user?.id;
     if (!window.confirm(
       `Generate a new temporary password for ${target.name} (@${target.username})? ` +
-      'They will be required to set a new password the next time they sign in.',
+      (isSelfReset
+        ? 'You will be required to set a new password the next time you sign in.'
+        : 'They will be required to set a new password the next time they sign in.'),
     )) return;
     setUserError('');
     setResetBusyUserId(target.id);
@@ -1937,16 +1940,6 @@ export function SettingsPage() {
                                 >
                                   {u.active ? 'Deactivate' : 'Reactivate'}
                                 </GlassButton>
-                                <GlassButton
-                                  variant="ghost"
-                                  className="px-2 py-1 text-xs"
-                                  title={`Generate temporary password for ${u.name}`}
-                                  loading={resetBusyUserId === u.id}
-                                  onClick={() => resetUserPassword(u)}
-                                  disabled={!u.active}
-                                >
-                                  <KeyRound className="h-3.5 w-3.5" />
-                                </GlassButton>
                               <GlassButton
                                 variant="ghost"
                                 className="px-2 py-1 text-xs text-red-400 hover:text-red-300"
@@ -1956,6 +1949,18 @@ export function SettingsPage() {
                                 <Trash2 className="h-3.5 w-3.5" />
                               </GlassButton>
                               </>
+                            )}
+                            {!isEditing && (
+                              <GlassButton
+                                variant="ghost"
+                                className="px-2 py-1 text-xs"
+                                title={`Generate temporary password for ${u.name}`}
+                                loading={resetBusyUserId === u.id}
+                                onClick={() => resetUserPassword(u)}
+                                disabled={!u.active}
+                              >
+                                <KeyRound className="h-3.5 w-3.5" />
+                              </GlassButton>
                             )}
                           </div>
                         </td>

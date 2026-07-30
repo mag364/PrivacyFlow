@@ -1228,9 +1228,6 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         }
         const u = d.users.find((x) => x.id === id);
         if (!u) throw new Error('User not found');
-        if (u.id === actor.id) {
-          throw new Error('You cannot reset your own password from user management.');
-        }
         if (!u.active) {
           throw new Error('Reactivate the account before resetting its password.');
         }

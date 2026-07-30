@@ -121,6 +121,11 @@ export interface CreateUserResult {
   tempPassword: string;
 }
 
+export interface ResetUserPasswordResult {
+  user: User;
+  tempPassword: string;
+}
+
 export interface UpdateUserInput {
   name?: string;
   role?: Role;
@@ -164,6 +169,7 @@ export interface PrivacyFlowAPI {
     logout: () => Promise<void>;
     createUser: (input: CreateUserInput) => Promise<CreateUserResult>;
     updateUser: (id: string, patch: UpdateUserInput) => Promise<User>;
+    resetUserPassword: (id: string) => Promise<ResetUserPasswordResult>;
     deleteUser: (id: string) => Promise<void>;
     changePassword: (username: string, currentPassword: string, newPassword: string) => Promise<LoginResult>;
   };

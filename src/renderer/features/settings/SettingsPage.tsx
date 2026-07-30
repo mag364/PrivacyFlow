@@ -1136,6 +1136,7 @@ export function SettingsPage() {
   const [editingUserId, setEditingUserId] = React.useState('');
   const [editName, setEditName] = React.useState('');
   const [editRole, setEditRole] = React.useState<Role>('privacy_analyst');
+  const [resetBusyUserId, setResetBusyUserId] = React.useState('');
 
   React.useEffect(() => {
     platform().system.settings().then(setSettings);
@@ -1239,6 +1240,29 @@ export function SettingsPage() {
       if (!updated.active && updated.id === user?.id) await init();
     } catch (e) {
       setUserError(e instanceof Error ? e.message : 'Unable to update account.');
+    }
+  }
+
+  async function resetUserPassword(target: User) {
+    if (!window.confirm(
+      `Generate a new temporary password for ${target.name} (@${target.username})? ` +
+      'They will be required to set a new password the next time they sign in.',
+    )) return;
+    setUserError('');
+    setResetBusyUserId(target.id);
+    try {
+      const { user: updated, tempPassword } = await platform().auth.resetUserPassword(target.id);
+      setUsers((list) => list.map((x) => (x.id === updated.id ? updated : x)));
+      setIssuedCredentials({
+        username: updated.username,
+        email: updated.email,
+        tempPassword,
+      });
+      setCopied(false);
+    } catch (e) {
+      setUserError(e instanceof Error ? e.message : 'Unable to reset password.');
+    } finally {
+      setResetBusyUserId('');
     }
   }
 
@@ -1762,8 +1786,8 @@ export function SettingsPage() {
                 </GlassButton>
               </div>
               <p className="text-[11px] text-muted">
-                Shown once — only the salted hash is stored. Share this with the new user through a secure
-                channel; they'll be required to set their own password at first sign-in.
+                Shown once — only the salted hash is stored. Share this with the user through a secure
+                channel; they'll be required to set their own password at next sign-in.
               </p>
               {issuedCredentials.email && issuedCredentials.inviteOpened && (
                 <p className="min-w-0 break-words text-[11px] text-emerald-300 [overflow-wrap:anywhere]">
@@ -1912,6 +1936,16 @@ export function SettingsPage() {
                                   onClick={() => toggleActive(u)}
                                 >
                                   {u.active ? 'Deactivate' : 'Reactivate'}
+                                </GlassButton>
+                                <GlassButton
+                                  variant="ghost"
+                                  className="px-2 py-1 text-xs"
+                                  title={`Generate temporary password for ${u.name}`}
+                                  loading={resetBusyUserId === u.id}
+                                  onClick={() => resetUserPassword(u)}
+                                  disabled={!u.active}
+                                >
+                                  <KeyRound className="h-3.5 w-3.5" />
                                 </GlassButton>
                               <GlassButton
                                 variant="ghost"

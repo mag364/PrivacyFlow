@@ -1219,6 +1219,35 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         save(d);
         return publicUser(u);
       },
+      async resetUserPassword(id: string) {
+        assertWritable();
+        const d = db();
+        const actor = actorOf(d);
+        if (!actor || actor.role !== 'administrator') {
+          throw new Error('Only administrators can reset passwords.');
+        }
+        const u = d.users.find((x) => x.id === id);
+        if (!u) throw new Error('User not found');
+        if (u.id === actor.id) {
+          throw new Error('You cannot reset your own password from user management.');
+        }
+        if (!u.active) {
+          throw new Error('Reactivate the account before resetting its password.');
+        }
+        const tempPassword = generateTempPassword();
+        u.passwordHash = await hashPassword(u.username, tempPassword);
+        u.mustChangePassword = true;
+        await appendAudit(d, actor, {
+          category: 'User',
+          action: 'user.password_reset',
+          entityType: 'user',
+          entityId: u.id,
+          summary: `${actor.name} reset the password for ${u.name} (@${u.username}); temporary password issued`,
+          newValue: { username: u.username, mustChangePassword: true },
+        });
+        save(d);
+        return { user: publicUser(u), tempPassword };
+      },
       async deleteUser(id: string): Promise<void> {
         assertWritable();
         const d = db();

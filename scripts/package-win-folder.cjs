@@ -6,9 +6,9 @@ const root = path.resolve(__dirname, '..');
 const pkg = require(path.join(root, 'package.json'));
 const releaseDir = path.join(root, 'release');
 const unpackedDir = path.join(releaseDir, 'win-unpacked');
-const folderName = `PrivacyFlow-${pkg.version}-x64-folder`;
+const folderName = 'PrivacyFlow';
 const stagingDir = path.join(releaseDir, folderName);
-const zipName = `${folderName}.zip`;
+const zipName = `PrivacyFlow-${pkg.version}-x64-folder.zip`;
 const zipPath = path.join(releaseDir, zipName);
 
 if (!fs.existsSync(unpackedDir)) {

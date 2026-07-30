@@ -112,7 +112,7 @@ async function downloadReleaseAsset(input: { assetApiUrl?: string; token?: strin
   return filePath;
 }
 
-function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { scriptPath: string; cmdPath: string; logPath: string } {
+function writeUpdaterScript(input: { zipPath: string; appFolder: string; lockPath: string }): { scriptPath: string; cmdPath: string; logPath: string } {
   const scriptDir = path.join(app.getPath('temp'), 'PrivacyFlow-updater');
   fs.mkdirSync(scriptDir, { recursive: true });
   const scriptPath = path.join(scriptDir, `Apply-PrivacyFlow-Update-${Date.now()}.ps1`);
@@ -132,6 +132,7 @@ function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { sc
     `$AppFolder = ${psLiteral(input.appFolder)}`,
     `$BackupRoot = ${psLiteral(backupRoot)}`,
     `$LogPath = ${psLiteral(logPath)}`,
+    `$LockPath = ${psLiteral(input.lockPath)}`,
     `$TargetPid = ${process.pid}`,
     'function Write-Log([string]$Message) {',
     '  $line = ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message)',
@@ -143,7 +144,19 @@ function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { sc
     '  Write-Log "PrivacyFlow update started."',
     '  Write-Log "Waiting for PrivacyFlow process $TargetPid to exit."',
     '  while (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }',
-    '  Start-Sleep -Seconds 3',
+    '  Write-Log "Waiting for the workspace lock to release."',
+    '  for ($i = 0; $i -lt 60; $i++) {',
+    '    if (-not (Test-Path -LiteralPath $LockPath)) { break }',
+    '    try {',
+    '      $holder = Get-Content -LiteralPath $LockPath -Raw | ConvertFrom-Json',
+    '      if ($holder.pid -eq $TargetPid) {',
+    '        Write-Log "Removing leftover lock from the updated PrivacyFlow process."',
+    '        Remove-Item -LiteralPath $LockPath -Force -ErrorAction Stop',
+    '        break',
+    '      }',
+    '    } catch { }',
+    '    Start-Sleep -Milliseconds 500',
+    '  }',
     '  $TempRoot = Join-Path $env:TEMP ("PrivacyFlow-update-" + [guid]::NewGuid().ToString("N"))',
     '  $ExtractRoot = Join-Path $TempRoot "extract"',
     '  New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null',
@@ -858,13 +871,14 @@ ipcMain.handle('updater:applyReleaseAsset', async (_e, input: { assetApiUrl?: st
     };
   }
 
-  const updater = writeUpdaterScript({ zipPath: filePath, appFolder: info.folderPath });
+  const updater = writeUpdaterScript({ zipPath: filePath, appFolder: info.folderPath, lockPath: lock.lockPath });
   const openError = await shell.openPath(updater.cmdPath);
   if (openError) {
     shell.showItemInFolder(updater.cmdPath);
     throw new Error(`Unable to start the updater handoff: ${openError}. Log: ${updater.logPath}`);
   }
   writeApplicationFolderPreference(info.folderPath);
+  flushAndReleaseLock();
   setTimeout(() => app.quit(), 1200);
   return { filePath, appFolder: info.folderPath, updaterScriptPath: updater.scriptPath, mode: 'automatic' as const, message: `Updater log: ${updater.logPath}` };
 });

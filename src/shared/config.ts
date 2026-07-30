@@ -4,7 +4,7 @@
 // -----------------------------------------------------------------------------
 
 export const APP_CONFIG = {
-  version: '1.0.85',
+  version: '1.0.86',
   productName: 'PrivacyFlow',
   tagline: 'DSR & Project Tracking',
   updates: {

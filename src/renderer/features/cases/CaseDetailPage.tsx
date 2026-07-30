@@ -59,6 +59,10 @@ interface EditDraft {
   closedDate: string;
 }
 
+function relationshipLabel(value: string): string {
+  return value === 'Customer' ? 'Client' : value;
+}
+
 export function CaseDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -158,7 +162,7 @@ export function CaseDetailPage() {
       dsrreqNumber: c!.caseNumber,
       lastName: c!.subject.lastName,
       email: c!.subject.emails[0] ?? '',
-      relationship: String(c!.subject.relationship),
+      relationship: relationshipLabel(String(c!.subject.relationship)),
       minor: c!.subject.minor,
       authorizedAgent: c!.subject.authorizedAgent,
       clientCenterStatus: c!.subject.clientCenterStatus ?? 'Not located',
@@ -820,7 +824,7 @@ export function CaseDetailPage() {
           <GlassPanel>
             <h3 className="mb-3 text-sm font-semibold text-ink">Requester</h3>
             <p className="text-sm font-medium text-ink">{c.subject.lastName}</p>
-            <p className="mb-3 text-xs text-muted">{c.subject.relationship}{c.subject.minor ? ' · Minor' : ''}{c.subject.authorizedAgent ? ' · Agent' : ''}</p>
+            <p className="mb-3 text-xs text-muted">{relationshipLabel(c.subject.relationship)}{c.subject.minor ? ' · Minor' : ''}{c.subject.authorizedAgent ? ' · Agent' : ''}</p>
             <div className="flex flex-col gap-1.5 text-sm text-muted">
               <span className="flex items-center gap-2">DSRREQ #: <span className="text-ink">{c.caseNumber}</span></span>
               {c.subject.emails.map((e) => <span key={e} className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /> {e}</span>)}

@@ -25,7 +25,7 @@ export function NewCasePage() {
   const [email, setEmail] = React.useState('');
   const [clientCenterStatus, setClientCenterStatus] = React.useState<string>('Not located');
   const [emailedFA, setEmailedFA] = React.useState('');
-  const [relationship, setRelationship] = React.useState<string>('Customer');
+  const [relationship, setRelationship] = React.useState<string>('Client');
   const [minor, setMinor] = React.useState(false);
   const [authorizedAgent, setAgent] = React.useState(false);
 

@@ -256,7 +256,7 @@ export function caseInputFromRow(row: TableRow, defaults: { jurisdiction: string
       emails: email ? [email] : [],
       phones: [],
       addresses: [],
-      relationship: pick(row, ['Relationship']) || 'Customer',
+      relationship: pick(row, ['Relationship']) || 'Client',
       minor: /^true|yes|1$/i.test(pick(row, ['Minor'])),
       authorizedAgent: /^true|yes|1$/i.test(pick(row, ['Authorized Agent'])),
       identifiers: requestId ? [{ label: 'Request ID', value: requestId }] : [],

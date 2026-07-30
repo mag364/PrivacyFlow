@@ -94,7 +94,7 @@ export const VERIFICATION_STATUSES = ['Not Started', 'Pending', 'Verified', 'Fai
 export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 
 export const RELATIONSHIP_TYPES = [
-  'Customer',
+  'Client',
   'Employee',
   'Former Employee',
   'Prospect',

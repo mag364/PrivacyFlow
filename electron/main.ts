@@ -166,6 +166,8 @@ function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { sc
     '  Start-Process -FilePath (Join-Path $AppFolder "PrivacyFlow.exe") -WorkingDirectory $AppFolder',
     '  Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue',
     '  Write-Log "PrivacyFlow update completed."',
+    '  Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue',
+    '  Remove-Item -LiteralPath $LogPath -Force -ErrorAction SilentlyContinue',
     '} catch {',
     '  Write-Log ("ERROR: " + $_.Exception.Message)',
     '  Start-Process notepad.exe $LogPath',

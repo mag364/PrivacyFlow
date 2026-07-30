@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Plus, Download, FolderKanban, CalendarDays } from 'lucide-react';
+import { Search, Plus, Download, FolderKanban, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { platform } from '../../platform';
 import type { DsrCase } from '@shared/types';
 import { CASE_STATUSES, OPEN_STATUSES, REQUEST_TYPES } from '@shared/constants';
@@ -11,6 +11,7 @@ import { readLastYear, writeLastYear, clearLastYear } from '../../lib/lastYear';
 import { useAuth, can } from '../../store/auth';
 
 type StatusFilter = 'all' | 'open' | 'closed' | string;
+const PAGE_SIZE = 15;
 
 export function CasesPage() {
   const { year: yearParam } = useParams();
@@ -20,6 +21,7 @@ export function CasesPage() {
   const [q, setQ] = React.useState('');
   const [status, setStatus] = React.useState<StatusFilter>('all');
   const [type, setType] = React.useState<string>('all');
+  const [page, setPage] = React.useState(0);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -35,6 +37,11 @@ export function CasesPage() {
   React.useEffect(() => {
     platform().cases.list().then(setCases);
   }, [year]);
+
+  React.useEffect(() => {
+    setPage(0);
+  }, [year, q, status, type]);
+
   if (!cases) return <Spinner label="Loading requests…" />;
 
   const yearCases = year
@@ -55,6 +62,10 @@ export function CasesPage() {
   });
 
   rows = [...rows].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  const pageCount = Math.max(Math.ceil(rows.length / PAGE_SIZE), 1);
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageStart = currentPage * PAGE_SIZE;
+  const pageRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
 
   function showAllYears() {
     clearLastYear('cases');
@@ -173,7 +184,7 @@ export function CasesPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((c) => {
+              {pageRows.map((c) => {
                 const requestId =
                   c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ??
                   c.subject.firstName ??
@@ -198,6 +209,32 @@ export function CasesPage() {
           </table>
         )}
       </div>
+      {rows.length > PAGE_SIZE && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+          <span>
+            Showing {pageStart + 1}-{Math.min(pageStart + pageRows.length, rows.length)} of {rows.length} requests
+          </span>
+          <div className="flex items-center gap-2">
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage === 0}
+              onClick={() => setPage((p) => Math.max(p - 1, 0))}
+            >
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </GlassButton>
+            <span className="rounded-capsule border border-line bg-[var(--pf-surface)] px-3 py-1.5 text-xs text-ink">
+              Page {currentPage + 1} of {pageCount}
+            </span>
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(p + 1, pageCount - 1))}
+            >
+              Next <ChevronRight className="h-4 w-4" />
+            </GlassButton>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

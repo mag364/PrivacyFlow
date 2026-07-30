@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Download, FolderPlus, ListChecks, CalendarDays, ChevronRight, Layers } from 'lucide-react';
+import { Search, Download, FolderPlus, ListChecks, CalendarDays, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 import { platform } from '../../platform';
 import type { Project } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
@@ -12,6 +12,7 @@ import { readLastYear, writeLastYear, clearLastYear } from '../../lib/lastYear';
 import { useAuth, can } from '../../store/auth';
 
 const SOURCES = ['DD', 'SSDS', 'Lighthouse'];
+const PAGE_SIZE = 15;
 
 function displayDate(p: Project): string {
   if (p.notificationCancelled) return 'Cancelled';
@@ -48,6 +49,7 @@ export function TasksPage() {
   const [statusFilter, setStatusFilter] = React.useState<'all' | string>('all');
   const [sort, setSort] = React.useState<'recent' | 'name' | 'date'>('recent');
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
+  const [page, setPage] = React.useState(0);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -63,6 +65,10 @@ export function TasksPage() {
   React.useEffect(() => {
     platform().projects.list().then(setProjects);
   }, [year]);
+
+  React.useEffect(() => {
+    setPage(0);
+  }, [year, q, source, statusFilter, sort]);
 
   if (!projects) return <Spinner label="Loading projects…" />;
 
@@ -209,6 +215,10 @@ export function TasksPage() {
   }
 
   const groupedCount = groups.filter((g) => g.children.length > 1).length;
+  const pageCount = Math.max(Math.ceil(groups.length / PAGE_SIZE), 1);
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageStart = currentPage * PAGE_SIZE;
+  const pageGroups = groups.slice(pageStart, pageStart + PAGE_SIZE);
 
   return (
     <div>
@@ -274,7 +284,7 @@ export function TasksPage() {
               </tr>
             </thead>
             <tbody>
-              {groups.map((g) => {
+              {pageGroups.map((g) => {
                 if (g.children.length === 1) {
                   const p = g.children[0];
                   return (
@@ -341,6 +351,32 @@ export function TasksPage() {
           </table>
         )}
       </div>
+      {groups.length > PAGE_SIZE && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+          <span>
+            Showing {pageStart + 1}-{Math.min(pageStart + pageGroups.length, groups.length)} of {groups.length} project rows/groups
+          </span>
+          <div className="flex items-center gap-2">
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage === 0}
+              onClick={() => setPage((p) => Math.max(p - 1, 0))}
+            >
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </GlassButton>
+            <span className="rounded-capsule border border-line bg-[var(--pf-surface)] px-3 py-1.5 text-xs text-ink">
+              Page {currentPage + 1} of {pageCount}
+            </span>
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(p + 1, pageCount - 1))}
+            >
+              Next <ChevronRight className="h-4 w-4" />
+            </GlassButton>
+          </div>
+        </div>
+      )}
 
       <p className="mt-3 text-xs text-muted">
         Projects sharing the same name are grouped under a collapsed parent row — click it to

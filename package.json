@@ -1,7 +1,7 @@
 {
   "name": "privacyflow",
   "private": true,
-  "version": "1.0.75",
+  "version": "1.0.76",
   "type": "module",
   "main": "build/electron/main.js",
   "author": {
@@ -13,6 +13,7 @@
     "build": "vite build",
     "build:electron": "mkdir -p build/electron && esbuild electron/main.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=build/electron/main.js && esbuild electron/preload.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=build/electron/preload.js && printf '{\"type\":\"commonjs\"}\\n' > build/electron/package.json",
     "dist:win": "npm run build && npm run build:electron && electron-builder --win portable --x64",
+    "dist:win:folder": "npm run build && npm run build:electron && electron-builder --win dir --x64 && node scripts/package-win-folder.cjs",
     "preview": "vite preview",
     "test": "vitest run"
   },

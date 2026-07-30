@@ -149,13 +149,15 @@ export function App() {
       await refreshLockState();
       const settings = await platform().system.settings();
       setNeedsSetup(!settings.setupComplete);
-      if (settings.setupComplete && settings.autoRetentionCleanup) {
-        await platform().system.applyRetentionCleanup({ automatic: true, auditWhenEmpty: false }).catch(() => {
-          // Startup should not fail because this instance is read-only or cleanup is unavailable.
-        });
-      }
       await init();
       setBooted(true);
+      if (settings.setupComplete && settings.autoRetentionCleanup) {
+        window.setTimeout(() => {
+          void platform().system.applyRetentionCleanup({ automatic: true, auditWhenEmpty: false }).catch(() => {
+            // Startup should not fail because this instance is read-only or cleanup is unavailable.
+          });
+        }, 5000);
+      }
       fetchLatestPublishedRelease().then(setAvailableRelease).catch(() => {
         // Startup and sign-in must keep working if GitHub is unavailable.
       });

@@ -75,7 +75,9 @@ function resolveDbPath(): string {
 }
 
 let dbPath = resolveDbPath();
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+if (isUserDataWorkspacePath(dbPath)) {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+}
 
 const BACKUP_LIMIT = 30;
 const SYNC_DEBOUNCE_MS = 1500;
@@ -91,6 +93,7 @@ interface WorkspaceSyncState {
 let syncState: WorkspaceSyncState = { mode: 'direct-shared', status: 'synced' };
 let syncTimer: NodeJS.Timeout | null = null;
 let lastLocalJson: string | null = null;
+let refreshTimer: NodeJS.Timeout | null = null;
 
 function localWorkspaceCachePath(sharedPath = dbPath): string {
   const digest = crypto.createHash('sha1').update(path.resolve(sharedPath).toLowerCase()).digest('hex').slice(0, 16);
@@ -107,7 +110,11 @@ function writeAtomic(filePath: string, raw: string): void {
 }
 
 function isUserDataWorkspace(): boolean {
-  return path.resolve(dbPath) === path.resolve(path.join(app.getPath('userData'), 'privacyflow.db.json'));
+  return isUserDataWorkspacePath(dbPath);
+}
+
+function isUserDataWorkspacePath(value: string): boolean {
+  return path.resolve(value) === path.resolve(path.join(app.getPath('userData'), 'privacyflow.db.json'));
 }
 
 function sharedRaw(): string | null {
@@ -128,6 +135,10 @@ function initializeWorkspaceCache(): void {
     clearTimeout(syncTimer);
     syncTimer = null;
   }
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
   lastLocalJson = null;
   if (lockState.mode !== 'write') {
     syncState = { mode: 'read-only', status: 'read-only' };
@@ -138,6 +149,17 @@ function initializeWorkspaceCache(): void {
     return;
   }
   const cachePath = localWorkspaceCachePath();
+  const cached = fs.existsSync(cachePath) ? fs.readFileSync(cachePath, 'utf8') : null;
+  if (cached) {
+    lastLocalJson = cached;
+    syncState = {
+      mode: 'local-cache',
+      status: 'pending',
+      localCachePath: cachePath,
+    };
+    refreshLocalCacheFromSharedLater(250);
+    return;
+  }
   const raw = sharedRaw();
   if (raw) {
     writeAtomic(cachePath, raw);
@@ -153,6 +175,48 @@ function initializeWorkspaceCache(): void {
       mode: 'local-cache',
       status: 'local-only',
       localCachePath: cachePath,
+    };
+  }
+}
+
+function refreshLocalCacheFromSharedLater(delayMs: number): void {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    refreshLocalCacheFromShared();
+  }, delayMs);
+  refreshTimer.unref?.();
+}
+
+function refreshLocalCacheFromShared(): void {
+  if (syncState.mode !== 'local-cache' || lockState.mode !== 'write' || !syncState.localCachePath) return;
+  try {
+    const cacheBefore = localRaw();
+    const shared = sharedRaw();
+    if (!shared) {
+      syncState = { ...syncState, status: cacheBefore ? 'synced' : 'local-only', lastError: undefined };
+      return;
+    }
+    if (cacheBefore !== lastLocalJson) {
+      syncState = { ...syncState, status: 'pending', lastError: undefined };
+      scheduleSyncLocalCache();
+      return;
+    }
+    if (shared !== cacheBefore) {
+      writeAtomic(syncState.localCachePath, shared);
+      lastLocalJson = shared;
+    }
+    syncState = {
+      ...syncState,
+      status: 'synced',
+      lastSyncedAt: new Date().toISOString(),
+      lastError: undefined,
+    };
+  } catch (e) {
+    syncState = {
+      ...syncState,
+      status: 'failed',
+      lastError: e instanceof Error ? e.message : 'Unable to refresh the local cache from the shared workspace.',
     };
   }
 }
@@ -441,6 +505,7 @@ ipcMain.handle('workspace:choosePath', async () => {
   lock.release();
   dbPath = nextPath;
   writeWorkspacePreference(dbPath);
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   lock = new WorkspaceLock(dbPath, os.userInfo().username);
   lockState = lock.acquire();
   initializeWorkspaceCache();
@@ -715,12 +780,14 @@ $mail.Display($false)
 });
 
 app.whenReady().then(() => {
-  try {
-    createBackup('startup');
-  } catch {
-    // A missing or invalid workspace should not prevent the app from opening.
-  }
   createWindow();
+  setTimeout(() => {
+    try {
+      createBackup('startup');
+    } catch {
+      // A missing or invalid workspace should not prevent the app from opening.
+    }
+  }, 5000).unref?.();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

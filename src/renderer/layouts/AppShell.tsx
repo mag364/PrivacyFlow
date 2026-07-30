@@ -18,8 +18,8 @@ import { initials, fmtDateTime } from '../lib/format';
 import privacyFlowIcon from '../assets/privacyflow-icon.png';
 import {
   currentLockState, refreshLockState, recheckLock, claimStaleLock, workspaceBridge,
-  windowControlsBridge,
-  type WorkspaceLockState,
+  windowControlsBridge, workspaceInfo,
+  type WorkspaceInfo, type WorkspaceLockState,
 } from '../platform/workspace';
 import type { AvailableRelease } from '../features/auth/LoginPage';
 
@@ -74,8 +74,65 @@ function useLockState(): WorkspaceLockState {
   return state;
 }
 
-function WindowTitleBar() {
+function useWorkspaceTitleInfo(): WorkspaceInfo | null {
+  const [info, setInfo] = React.useState<WorkspaceInfo | null>(null);
+  React.useEffect(() => {
+    if (!workspaceBridge()) return;
+    let cancelled = false;
+    const load = () => {
+      workspaceInfo().then((next) => {
+        if (!cancelled) setInfo(next);
+      }).catch(() => {
+        if (!cancelled) setInfo(null);
+      });
+    };
+    load();
+    const t = setInterval(load, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+  return info;
+}
+
+function TitleStatusChip({
+  tone,
+  children,
+  title,
+}: {
+  tone: 'neutral' | 'success' | 'warn' | 'danger';
+  children: React.ReactNode;
+  title?: string;
+}) {
+  const toneClass = {
+    neutral: 'border-line bg-[var(--pf-highlight)] text-muted',
+    success: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
+    warn: 'border-amber-400/40 bg-amber-500/10 text-amber-100',
+    danger: 'border-red-400/40 bg-red-500/10 text-red-100',
+  }[tone];
+  return (
+    <span
+      title={title}
+      className={clsx(
+        'flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-capsule border px-2.5 text-[11px] font-medium leading-none',
+        toneClass,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function WindowTitleBar({
+  lockState,
+  availableRelease,
+}: {
+  lockState: WorkspaceLockState;
+  availableRelease: AvailableRelease | null;
+}) {
   const controls = windowControlsBridge();
+  const info = useWorkspaceTitleInfo();
   const [maximized, setMaximized] = React.useState(false);
   if (!controls) return null;
 
@@ -85,12 +142,61 @@ function WindowTitleBar() {
 
   return (
     <div className="app-drag-region sticky top-0 z-50 flex h-10 shrink-0 items-center border-b border-line bg-[var(--pf-surface)]/78 px-3 backdrop-blur-xl">
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 shrink items-center gap-2">
         <img src={privacyFlowIcon} alt="" className="h-5 w-5 rounded-md object-cover" />
         <span className="truncate text-xs font-semibold text-ink">{APP_CONFIG.productName}</span>
         <span className="hidden text-[11px] text-muted sm:inline">{APP_CONFIG.tagline}</span>
       </div>
-      <div className="app-no-drag ml-auto flex items-center gap-1">
+      <div className="app-no-drag app-title-status ml-auto mr-2 flex min-w-0 max-w-[calc(100vw-24rem)] items-center justify-end gap-1.5 overflow-x-auto whitespace-nowrap">
+        {availableRelease && (
+          <TitleStatusChip tone="warn" title={`Update available: ${availableRelease.tag_name}`}>
+            <PackageCheck className="h-3.5 w-3.5 shrink-0" /> Update available {availableRelease.tag_name}
+          </TitleStatusChip>
+        )}
+        {lockState.mode === 'read-only' ? (
+          <TitleStatusChip
+            tone={lockState.stale ? 'warn' : 'warn'}
+            title={`Read-only — ${lockState.holder.user} on ${lockState.holder.machine} is currently editing`}
+          >
+            <Lock className="h-3.5 w-3.5 shrink-0" />
+            {lockState.stale ? 'Stale lock available' : `Read-only: ${lockState.holder.user}`}
+          </TitleStatusChip>
+        ) : (
+          <TitleStatusChip tone="success" title={`Edit lock held by this PrivacyFlow window`}>
+            <Lock className="h-3.5 w-3.5 shrink-0" /> Editable
+          </TitleStatusChip>
+        )}
+        {info?.sync && (
+          <>
+            {info.sync.status === 'failed' && (
+              <TitleStatusChip tone="danger" title={info.sync.lastError ?? 'Shared workspace sync failed.'}>
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" /> Sync failed
+              </TitleStatusChip>
+            )}
+            {info.sync.status === 'syncing' && (
+              <TitleStatusChip tone="warn" title="PrivacyFlow is syncing local changes to the shared workspace.">
+                <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" /> Syncing
+              </TitleStatusChip>
+            )}
+            {info.sync.status === 'pending' && (
+              <TitleStatusChip tone="warn" title="PrivacyFlow has pending local changes or is checking the shared workspace.">
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" /> {info.sync.lastSyncedAt ? 'Saving changes' : 'Checking sync'}
+              </TitleStatusChip>
+            )}
+            {info.sync.status === 'local-only' && (
+              <TitleStatusChip tone="warn" title="The local cache exists, but the shared workspace has not synced yet.">
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" /> Local only
+              </TitleStatusChip>
+            )}
+            {info.sync.status === 'synced' && (
+              <TitleStatusChip tone="success" title={info.sync.lastSyncedAt ? `Last synced ${fmtDateTime(info.sync.lastSyncedAt)}` : 'Workspace is synced.'}>
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" /> Synced
+              </TitleStatusChip>
+            )}
+          </>
+        )}
+      </div>
+      <div className="app-no-drag flex shrink-0 items-center gap-1">
         <button
           type="button"
           onClick={() => void controls.minimize()}
@@ -440,7 +546,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <WindowTitleBar />
+      <WindowTitleBar lockState={lockState} availableRelease={availableRelease} />
       <div className="flex min-h-0 flex-1">
       <aside
         className={clsx(

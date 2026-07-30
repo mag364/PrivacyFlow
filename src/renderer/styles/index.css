@@ -116,6 +116,14 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.app-title-status {
+  scrollbar-width: none;
+}
+
+.app-title-status::-webkit-scrollbar {
+  display: none;
+}
+
 /* Glass surface primitives */
 .glass {
   background: var(--pf-surface);

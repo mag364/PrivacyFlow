@@ -108,37 +108,60 @@ async function downloadReleaseAsset(input: { assetApiUrl?: string; token?: strin
   return filePath;
 }
 
-function writeUpdaterScript(input: { zipPath: string; appFolder: string }): string {
+function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { scriptPath: string; logPath: string } {
   const scriptDir = path.join(app.getPath('temp'), 'PrivacyFlow-updater');
   fs.mkdirSync(scriptDir, { recursive: true });
   const scriptPath = path.join(scriptDir, `Apply-PrivacyFlow-Update-${Date.now()}.ps1`);
   const backupRoot = path.join(app.getPath('downloads'), 'PrivacyFlow backups');
+  const logPath = path.join(app.getPath('downloads'), 'PrivacyFlow-update.log');
   const lines = [
     '$ErrorActionPreference = "Stop"',
     `$ZipPath = ${psLiteral(input.zipPath)}`,
     `$AppFolder = ${psLiteral(input.appFolder)}`,
     `$BackupRoot = ${psLiteral(backupRoot)}`,
+    `$LogPath = ${psLiteral(logPath)}`,
     `$TargetPid = ${process.pid}`,
-    'while (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }',
-    '$TempRoot = Join-Path $env:TEMP ("PrivacyFlow-update-" + [guid]::NewGuid().ToString("N"))',
-    '$ExtractRoot = Join-Path $TempRoot "extract"',
-    'New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null',
-    'Expand-Archive -LiteralPath $ZipPath -DestinationPath $ExtractRoot -Force',
-    '$SourceFolder = Get-ChildItem -LiteralPath $ExtractRoot -Directory | Where-Object { Test-Path (Join-Path $_.FullName "PrivacyFlow.exe") } | Select-Object -First 1',
-    'if (-not $SourceFolder -and (Test-Path (Join-Path $ExtractRoot "PrivacyFlow.exe"))) { $SourcePath = $ExtractRoot }',
-    'elseif ($SourceFolder) { $SourcePath = $SourceFolder.FullName }',
-    'else { throw "The update ZIP does not contain PrivacyFlow.exe." }',
-    'if (-not (Test-Path (Join-Path $AppFolder "PrivacyFlow.exe"))) { throw "The selected app folder does not contain PrivacyFlow.exe." }',
-    'New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null',
-    '$BackupFolder = Join-Path $BackupRoot ("PrivacyFlow-app-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss"))',
-    'Copy-Item -LiteralPath $AppFolder -Destination $BackupFolder -Recurse -Force',
-    'Get-ChildItem -LiteralPath $AppFolder -Force | Remove-Item -Recurse -Force',
-    'Get-ChildItem -LiteralPath $SourcePath -Force | Copy-Item -Destination $AppFolder -Recurse -Force',
-    'Start-Process -FilePath (Join-Path $AppFolder "PrivacyFlow.exe")',
-    'Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue',
+    'function Write-Log([string]$Message) {',
+    '  $line = ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message)',
+    '  Add-Content -LiteralPath $LogPath -Value $line',
+    '}',
+    'try {',
+    '  Set-Location -LiteralPath $env:TEMP',
+    '  Remove-Item -LiteralPath $LogPath -Force -ErrorAction SilentlyContinue',
+    '  Write-Log "PrivacyFlow update started."',
+    '  Write-Log "Waiting for PrivacyFlow process $TargetPid to exit."',
+    '  while (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }',
+    '  Start-Sleep -Seconds 3',
+    '  $TempRoot = Join-Path $env:TEMP ("PrivacyFlow-update-" + [guid]::NewGuid().ToString("N"))',
+    '  $ExtractRoot = Join-Path $TempRoot "extract"',
+    '  New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null',
+    '  Write-Log "Extracting $ZipPath."',
+    '  Expand-Archive -LiteralPath $ZipPath -DestinationPath $ExtractRoot -Force',
+    '  $SourceFolder = Get-ChildItem -LiteralPath $ExtractRoot -Directory | Where-Object { Test-Path (Join-Path $_.FullName "PrivacyFlow.exe") } | Select-Object -First 1',
+    '  if (-not $SourceFolder -and (Test-Path (Join-Path $ExtractRoot "PrivacyFlow.exe"))) { $SourcePath = $ExtractRoot }',
+    '  elseif ($SourceFolder) { $SourcePath = $SourceFolder.FullName }',
+    '  else { throw "The update ZIP does not contain PrivacyFlow.exe." }',
+    '  if (-not (Test-Path (Join-Path $AppFolder "PrivacyFlow.exe"))) { throw "The selected app folder does not contain PrivacyFlow.exe: $AppFolder" }',
+    '  New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null',
+    '  $BackupFolder = Join-Path $BackupRoot ("PrivacyFlow-app-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss"))',
+    '  Write-Log "Backing up current app folder to $BackupFolder."',
+    '  New-Item -ItemType Directory -Path $BackupFolder -Force | Out-Null',
+    '  Get-ChildItem -LiteralPath $AppFolder -Force | Copy-Item -Destination $BackupFolder -Recurse -Force',
+    '  Write-Log "Replacing files in $AppFolder."',
+    '  Get-ChildItem -LiteralPath $AppFolder -Force | Remove-Item -Recurse -Force',
+    '  Get-ChildItem -LiteralPath $SourcePath -Force | Copy-Item -Destination $AppFolder -Recurse -Force',
+    '  Write-Log "Starting updated PrivacyFlow."',
+    '  Start-Process -FilePath (Join-Path $AppFolder "PrivacyFlow.exe") -WorkingDirectory $AppFolder',
+    '  Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue',
+    '  Write-Log "PrivacyFlow update completed."',
+    '} catch {',
+    '  Write-Log ("ERROR: " + $_.Exception.Message)',
+    '  Start-Process notepad.exe $LogPath',
+    '  exit 1',
+    '}',
   ];
   fs.writeFileSync(scriptPath, lines.join('\r\n'), 'utf8');
-  return scriptPath;
+  return { scriptPath, logPath };
 }
 
 function workspacePreferencePath(): string {
@@ -807,16 +830,17 @@ ipcMain.handle('updater:applyReleaseAsset', async (_e, input: { assetApiUrl?: st
     };
   }
 
-  const updaterScriptPath = writeUpdaterScript({ zipPath: filePath, appFolder: info.folderPath });
-  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updaterScriptPath], {
+  const updater = writeUpdaterScript({ zipPath: filePath, appFolder: info.folderPath });
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updater.scriptPath], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
+    cwd: app.getPath('temp'),
   });
   child.unref();
   writeApplicationFolderPreference(info.folderPath);
   setTimeout(() => app.quit(), 300);
-  return { filePath, appFolder: info.folderPath, updaterScriptPath, mode: 'automatic' as const };
+  return { filePath, appFolder: info.folderPath, updaterScriptPath: updater.scriptPath, mode: 'automatic' as const, message: `Updater log: ${updater.logPath}` };
 });
 
 ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; subject?: string; body?: string }) => {

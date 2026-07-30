@@ -398,6 +398,7 @@ let lockState: LockState = {
 let workspaceReady = false;
 
 let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
 
 function ensureWorkspaceReady(): void {
   if (workspaceReady) return;
@@ -446,6 +447,25 @@ function splashHtml(): string {
 </html>`;
 }
 
+function createSplashWindow(): void {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 260,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    closable: true,
+    alwaysOnTop: true,
+    frame: false,
+    show: false,
+    backgroundColor: '#0b1020',
+    icon: path.join(__dirname, '../../assets/privacyflow-icon.png'),
+  });
+  splashWindow.once('ready-to-show', () => splashWindow?.show());
+  void splashWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml())}`);
+}
+
 async function loadAppWindow(): Promise<void> {
   ensureWorkspaceReady();
   if (!mainWindow) return;
@@ -464,6 +484,7 @@ function createWindow() {
     minHeight: 720,
     backgroundColor: '#0b1020',
     frame: false,
+    show: false,
     icon: path.join(__dirname, '../../assets/privacyflow-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -473,12 +494,15 @@ function createWindow() {
     },
   });
 
-  mainWindow.webContents.once('did-finish-load', () => {
-    setTimeout(() => {
-      void loadAppWindow();
-    }, 900);
+  mainWindow.once('closed', () => {
+    mainWindow = null;
   });
-  void mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml())}`);
+  mainWindow.webContents.once('did-finish-load', () => {
+    splashWindow?.close();
+    splashWindow = null;
+    mainWindow?.show();
+  });
+  void loadAppWindow();
 }
 
 ipcMain.handle('window:minimize', () => {
@@ -875,7 +899,10 @@ $mail.Display($false)
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
-  createWindow();
+  createSplashWindow();
+  setTimeout(() => {
+    createWindow();
+  }, 100);
   setTimeout(() => {
     try {
       createBackup('startup');
@@ -884,7 +911,12 @@ app.whenReady().then(() => {
     }
   }, 5000).unref?.();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createSplashWindow();
+      setTimeout(() => {
+        createWindow();
+      }, 100);
+    }
   });
 });
 

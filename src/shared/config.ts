@@ -4,9 +4,9 @@
 // -----------------------------------------------------------------------------
 
 export const APP_CONFIG = {
-  version: '1.0.67',
+  version: '1.0.68',
   productName: 'PrivacyFlow',
-  tagline: 'DSR Tracking',
+  tagline: 'DSR & Project Tracking',
   updates: {
     owner: 'mag364',
     repo: 'PrivacyFlow',

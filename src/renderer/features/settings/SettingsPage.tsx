@@ -1430,27 +1430,32 @@ export function SettingsPage() {
       )}
 
       {tab === 'organization' && (
-        <GlassPanel className="max-w-2xl">
-          <div className="flex flex-col gap-3">
-            <Field label="Organization name">
-              <GlassInput disabled={!editable} value={settings.organizationName} onChange={(e) => setSettings({ ...settings, organizationName: e.target.value })} />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Request ID prefix">
-                <GlassInput disabled={!editable} value={settings.caseNumberPrefix} onChange={(e) => setSettings({ ...settings, caseNumberPrefix: e.target.value })} />
-              </Field>
-              <Field label="Auto-lock (minutes)">
-                <GlassInput disabled={!editable} type="number" value={settings.autoLockMinutes} onChange={(e) => setSettings({ ...settings, autoLockMinutes: Number(e.target.value) })} />
-              </Field>
-            </div>
-            <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
+        <div className="max-w-5xl">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]">
+            <GlassPanel>
+              <div className="flex flex-col gap-3">
+                <Field label="Organization name">
+                  <GlassInput disabled={!editable} value={settings.organizationName} onChange={(e) => setSettings({ ...settings, organizationName: e.target.value })} />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Request ID prefix">
+                    <GlassInput disabled={!editable} value={settings.caseNumberPrefix} onChange={(e) => setSettings({ ...settings, caseNumberPrefix: e.target.value })} />
+                  </Field>
+                  <Field label="Auto-lock (minutes)">
+                    <GlassInput disabled={!editable} type="number" value={settings.autoLockMinutes} onChange={(e) => setSettings({ ...settings, autoLockMinutes: Number(e.target.value) })} />
+                  </Field>
+                </div>
+              </div>
+            </GlassPanel>
+
+            <GlassPanel>
               <div className="mb-3">
                 <h4 className="text-sm font-semibold text-ink">Retention</h4>
                 <p className="text-xs text-muted">
                   Choose how many years PrivacyFlow should keep request and project records before they are eligible for deletion.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-[12rem_1fr]">
+              <div className="grid gap-3">
                 <Field label="Retention period">
                   <GlassInput
                     disabled={!editable}
@@ -1464,11 +1469,9 @@ export function SettingsPage() {
                     })}
                   />
                 </Field>
-                <div className="flex items-end">
-                  <p className="pb-2 text-xs text-muted">
-                    Records older than this many years can be deleted using the cleanup action below. Default is 5 years.
-                  </p>
-                </div>
+                <p className="text-xs text-muted">
+                  Records older than this many years can be deleted using the cleanup action below. Default is 5 years.
+                </p>
               </div>
               <label className="mt-3 flex items-start gap-3 rounded-xl border border-line bg-[var(--pf-highlight)] px-3 py-2 text-sm text-ink">
                 <input
@@ -1495,7 +1498,9 @@ export function SettingsPage() {
               )}
               {retentionResult && <p className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{retentionResult}</p>}
               {retentionError && <p className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{retentionError}</p>}
-            </div>
+            </GlassPanel>
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
             {editable && (
               <div className="flex items-center gap-2 pt-1">
                 <GlassButton variant="primary" onClick={save}>
@@ -1513,7 +1518,7 @@ export function SettingsPage() {
               </p>
             )}
           </div>
-        </GlassPanel>
+        </div>
       )}
 
       {tab === 'integrations' && (

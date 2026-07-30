@@ -1197,18 +1197,24 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         if (u.id === actor.id && patch.active === false) {
           throw new Error('You cannot deactivate your own account.');
         }
-        const before = { role: u.role, active: u.active };
+        const before = { name: u.name, role: u.role, active: u.active };
+        if (patch.name !== undefined) {
+          const name = patch.name.trim();
+          if (!name) throw new Error('Name is required.');
+          u.name = name;
+        }
         if (patch.role) u.role = patch.role;
         if (patch.active !== undefined) u.active = patch.active;
         if (!u.active && d.currentUserId === u.id) d.currentUserId = null;
+        const nameChange = before.name !== u.name ? `name: ${before.name} → ${u.name}; ` : '';
         await appendAudit(d, actor, {
           category: 'User',
           action: 'user.updated',
           entityType: 'user',
           entityId: u.id,
-          summary: `${u.name}'s account updated (role: ${before.role} → ${u.role}${u.active !== before.active ? `; ${u.active ? 'activated' : 'deactivated'}` : ''})`,
+          summary: `${u.name}'s account updated (${nameChange}role: ${before.role} → ${u.role}${u.active !== before.active ? `; ${u.active ? 'activated' : 'deactivated'}` : ''})`,
           previousValue: before,
-          newValue: { role: u.role, active: u.active },
+          newValue: { name: u.name, role: u.role, active: u.active },
         });
         save(d);
         return publicUser(u);

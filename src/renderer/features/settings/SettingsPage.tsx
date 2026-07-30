@@ -1133,6 +1133,9 @@ export function SettingsPage() {
   const [addBusy, setAddBusy] = React.useState(false);
   const [issuedCredentials, setIssuedCredentials] = React.useState<{ username: string; email?: string; tempPassword: string; inviteOpened?: boolean; inviteError?: string } | null>(null);
   const [copied, setCopied] = React.useState(false);
+  const [editingUserId, setEditingUserId] = React.useState('');
+  const [editName, setEditName] = React.useState('');
+  const [editRole, setEditRole] = React.useState<Role>('privacy_analyst');
 
   React.useEffect(() => {
     platform().system.settings().then(setSettings);
@@ -1193,6 +1196,37 @@ export function SettingsPage() {
       setUsers((list) => list.map((x) => (x.id === updated.id ? updated : x)));
     } catch (e) {
       setUserError(e instanceof Error ? e.message : 'Unable to update role.');
+    }
+  }
+
+  function startUserEdit(target: User) {
+    setUserError('');
+    setEditingUserId(target.id);
+    setEditName(target.name);
+    setEditRole(target.role);
+  }
+
+  function cancelUserEdit() {
+    setEditingUserId('');
+    setEditName('');
+    setEditRole('privacy_analyst');
+  }
+
+  async function saveUserEdit(target: User) {
+    const name = editName.trim();
+    if (!name) {
+      setUserError('Name is required.');
+      return;
+    }
+    setUserError('');
+    try {
+      const patch = target.id === user?.id ? { name } : { name, role: editRole };
+      const updated = await platform().auth.updateUser(target.id, patch);
+      setUsers((list) => list.map((x) => (x.id === updated.id ? updated : x)));
+      if (updated.id === user?.id) await init();
+      cancelUserEdit();
+    } catch (e) {
+      setUserError(e instanceof Error ? e.message : 'Unable to update user.');
     }
   }
 
@@ -1804,18 +1838,28 @@ export function SettingsPage() {
               <tbody>
                 {users.map((u) => {
                   const isSelf = u.id === user?.id;
+                  const isEditing = editingUserId === u.id;
                   return (
                     <tr key={u.id} className="border-b border-line/60">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-ink">{u.name}{isSelf && <span className="ml-2 text-[10px] text-muted">(you)</span>}</p>
+                        {isEditing ? (
+                          <GlassInput
+                            className="max-w-xs px-2 py-1.5 text-xs"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            autoFocus
+                          />
+                        ) : (
+                          <p className="font-medium text-ink">{u.name}{isSelf && <span className="ml-2 text-[10px] text-muted">(you)</span>}</p>
+                        )}
                         <p className="text-[11px] text-muted">@{u.username}{u.email ? ` · ${u.email}` : ''}</p>
                       </td>
                       <td className="px-4 py-3">
-                        {canManageUsers && !isSelf ? (
+                        {isEditing && !isSelf ? (
                           <GlassSelect
                             className="w-44 px-2 py-1.5 text-xs"
-                            value={u.role}
-                            onChange={(e) => changeRole(u, e.target.value as Role)}
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value as Role)}
                           >
                             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                           </GlassSelect>
@@ -1830,15 +1874,45 @@ export function SettingsPage() {
                       </td>
                       {canManageUsers && (
                         <td className="px-4 py-3">
-                          {!isSelf && (
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5">
+                            {isEditing ? (
+                              <>
+                                <GlassButton
+                                  variant="primary"
+                                  className="px-2 py-1 text-xs"
+                                  title={`Save ${u.name}`}
+                                  onClick={() => saveUserEdit(u)}
+                                >
+                                  <Save className="h-3.5 w-3.5" />
+                                </GlassButton>
+                                <GlassButton
+                                  variant="ghost"
+                                  className="px-2 py-1 text-xs"
+                                  title="Cancel edit"
+                                  onClick={cancelUserEdit}
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                </GlassButton>
+                              </>
+                            ) : (
                               <GlassButton
-                                variant={u.active ? 'ghost' : 'subtle'}
-                                className="px-3 py-1 text-xs"
-                                onClick={() => toggleActive(u)}
+                                variant="ghost"
+                                className="px-2 py-1 text-xs"
+                                title={`Edit ${u.name}`}
+                                onClick={() => startUserEdit(u)}
                               >
-                                {u.active ? 'Deactivate' : 'Reactivate'}
+                                <Pencil className="h-3.5 w-3.5" />
                               </GlassButton>
+                            )}
+                            {!isSelf && !isEditing && (
+                              <>
+                                <GlassButton
+                                  variant={u.active ? 'ghost' : 'subtle'}
+                                  className="px-3 py-1 text-xs"
+                                  onClick={() => toggleActive(u)}
+                                >
+                                  {u.active ? 'Deactivate' : 'Reactivate'}
+                                </GlassButton>
                               <GlassButton
                                 variant="ghost"
                                 className="px-2 py-1 text-xs text-red-400 hover:text-red-300"
@@ -1847,8 +1921,9 @@ export function SettingsPage() {
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </GlassButton>
-                            </div>
-                          )}
+                              </>
+                            )}
+                          </div>
                         </td>
                       )}
                     </tr>

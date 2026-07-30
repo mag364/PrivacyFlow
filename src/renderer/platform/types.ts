@@ -122,6 +122,7 @@ export interface CreateUserResult {
 }
 
 export interface UpdateUserInput {
+  name?: string;
   role?: Role;
   active?: boolean;
 }

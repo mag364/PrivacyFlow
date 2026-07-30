@@ -34,6 +34,10 @@ export interface DashboardMetrics {
   doNotSaleCount: number;
   receivedThisMonth: number;
   closedThisMonth: number;
+  totalProjects: number;
+  activeProjects: number;
+  projectsThisMonth: number;
+  closedProjectsThisMonth: number;
 }
 
 export interface NewCaseInput {

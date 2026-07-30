@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Plus, Download, FolderKanban, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Download, FolderKanban, CalendarDays, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { platform } from '../../platform';
 import type { DsrCase } from '@shared/types';
 import { CASE_STATUSES, OPEN_STATUSES, REQUEST_TYPES } from '@shared/constants';
@@ -12,16 +12,27 @@ import { useAuth, can } from '../../store/auth';
 
 type StatusFilter = 'all' | 'open' | 'closed' | string;
 const PAGE_SIZE = 15;
+const FILTERS_KEY = 'privacyflow.requests.filters.v1';
+
+function readFilters(): { q: string; status: StatusFilter; type: string; page: number } {
+  try {
+    return { q: '', status: 'all', type: 'all', page: 0, ...JSON.parse(localStorage.getItem(FILTERS_KEY) || '{}') };
+  } catch {
+    return { q: '', status: 'all', type: 'all', page: 0 };
+  }
+}
 
 export function CasesPage() {
   const { year: yearParam } = useParams();
   const year = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : null;
 
   const [cases, setCases] = React.useState<DsrCase[] | null>(null);
-  const [q, setQ] = React.useState('');
-  const [status, setStatus] = React.useState<StatusFilter>('all');
-  const [type, setType] = React.useState<string>('all');
-  const [page, setPage] = React.useState(0);
+  const savedFilters = React.useMemo(readFilters, []);
+  const [q, setQ] = React.useState(savedFilters.q);
+  const [status, setStatus] = React.useState<StatusFilter>(savedFilters.status);
+  const [type, setType] = React.useState<string>(savedFilters.type);
+  const [page, setPage] = React.useState(savedFilters.page);
+  const didInitFilters = React.useRef(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -39,8 +50,16 @@ export function CasesPage() {
   }, [year]);
 
   React.useEffect(() => {
+    if (!didInitFilters.current) {
+      didInitFilters.current = true;
+      return;
+    }
     setPage(0);
   }, [year, q, status, type]);
+
+  React.useEffect(() => {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({ q, status, type, page }));
+  }, [q, status, type, page]);
 
   if (!cases) return <Spinner label="Loading requests…" />;
 
@@ -145,21 +164,23 @@ export function CasesPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[240px] flex-1">
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <GlassInput className="pl-9" placeholder="Search request number, name, email…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <GlassSelect className="w-56" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="open">Open requests</option>
-          <option value="closed">Closed requests</option>
-          {CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </GlassSelect>
-        <GlassSelect className="w-44" value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="all">All types</option>
-          {REQUEST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </GlassSelect>
+        <div className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1">
+          <GlassSelect className="w-56 shrink-0" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="all">All statuses</option>
+            <option value="open">Open requests</option>
+            <option value="closed">Closed requests</option>
+            {CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </GlassSelect>
+          <GlassSelect className="w-44 shrink-0" value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="all">All types</option>
+            {REQUEST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </GlassSelect>
+        </div>
       </div>
 
       <div className="content-surface overflow-x-auto">
@@ -218,6 +239,14 @@ export function CasesPage() {
             <GlassButton
               className="px-3 py-1.5"
               disabled={currentPage === 0}
+              onClick={() => setPage(0)}
+              title="First page"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </GlassButton>
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage === 0}
               onClick={() => setPage((p) => Math.max(p - 1, 0))}
             >
               <ChevronLeft className="h-4 w-4" /> Previous
@@ -231,6 +260,14 @@ export function CasesPage() {
               onClick={() => setPage((p) => Math.min(p + 1, pageCount - 1))}
             >
               Next <ChevronRight className="h-4 w-4" />
+            </GlassButton>
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setPage(pageCount - 1)}
+              title="Last page"
+            >
+              <ChevronsRight className="h-4 w-4" />
             </GlassButton>
           </div>
         </div>

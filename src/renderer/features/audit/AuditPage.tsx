@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, CheckCircle2, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { platform } from '../../platform';
 import type { AuditEvent, IntegrityReport } from '@shared/types';
 import { PageHeader } from '../../layouts/AppShell';
@@ -15,13 +15,14 @@ export function AuditPage() {
   const [verifying, setVerifying] = React.useState(false);
   const [page, setPage] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<(typeof AUDIT_PAGE_SIZES)[number]>(10);
+  const [archiveMonth, setArchiveMonth] = React.useState('latest');
   const { user } = useAuth();
 
   const load = React.useCallback(() => platform().audit.list().then(setEvents), []);
   React.useEffect(() => { load(); }, [load]);
   React.useEffect(() => {
     setPage(0);
-  }, [pageSize]);
+  }, [pageSize, archiveMonth]);
 
   React.useEffect(() => {
     const nextPageCount = Math.max(Math.ceil((events?.length ?? 0) / pageSize), 1);
@@ -38,7 +39,10 @@ export function AuditPage() {
 
   if (!events) return <Spinner label="Loading audit trail…" />;
 
-  const ordered = [...events].reverse();
+  const archiveMonths = Array.from(new Set(events.map((e) => e.utc.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
+  const selectedMonth = archiveMonth === 'latest' ? archiveMonths[0] : archiveMonth;
+  const archiveEvents = selectedMonth === 'all' ? events : events.filter((e) => e.utc.startsWith(selectedMonth ?? ''));
+  const ordered = [...archiveEvents].reverse();
   const pageCount = Math.max(Math.ceil(ordered.length / pageSize), 1);
   const pageStart = page * pageSize;
   const visibleEvents = ordered.slice(pageStart, pageStart + pageSize);
@@ -47,7 +51,7 @@ export function AuditPage() {
     <div>
       <PageHeader
         title="Audit Integrity"
-        subtitle={`${events.length} recorded events in a hash-linked chain.`}
+        subtitle={`${events.length} recorded events in a hash-linked chain. Viewing ${ordered.length} event${ordered.length === 1 ? '' : 's'}${selectedMonth && selectedMonth !== 'all' ? ` from ${selectedMonth}` : ''}.`}
         actions={
           can(user?.role, 'audit.verify') && (
             <GlassButton variant="primary" loading={verifying} onClick={verify}>
@@ -74,7 +78,21 @@ export function AuditPage() {
         <GlassPanel><EmptyState title="No audit events yet" icon={<RefreshCw className="h-6 w-6" />} /></GlassPanel>
       ) : (
         <div className="content-surface overflow-hidden">
-          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-line bg-[var(--pf-surface)] px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-[var(--pf-surface)] px-4 py-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-muted" />
+              <span className="text-xs font-medium text-muted">Monthly archive</span>
+              <GlassSelect
+                className="w-52"
+                value={archiveMonth}
+                onChange={(e) => setArchiveMonth(e.target.value)}
+              >
+                <option value="latest">Latest month</option>
+                <option value="all">All audit events</option>
+                {archiveMonths.map((month) => <option key={month} value={month}>{month}</option>)}
+              </GlassSelect>
+            </div>
+            <div className="flex items-center gap-2">
             <GlassSelect
               className="w-36"
               value={String(pageSize)}
@@ -103,6 +121,7 @@ export function AuditPage() {
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+            </div>
           </div>
           <table className="w-full text-left text-sm">
             <thead className="bg-[var(--pf-surface-2)]">

@@ -1,10 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FolderOpen, Trash2, BellOff, Ban, PenLine, Eye, Inbox, CheckCircle2, Plus, FolderPlus,
+  FolderOpen, Trash2, BellOff, Ban, Inbox, CheckCircle2, Plus, FolderPlus, ClipboardList, Activity,
 } from 'lucide-react';
 import { platform } from '../../platform';
-import type { DsrCase, Project } from '@shared/types';
+import type { AuditEvent, DsrCase, Project } from '@shared/types';
 import type { DashboardMetrics } from '../../platform/types';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassCard, GlassPanel, GlassBadge, GlassButton, Spinner, EmptyState } from '../../components/glass';
@@ -40,6 +40,7 @@ export function DashboardPage() {
   const [metrics, setMetrics] = React.useState<DashboardMetrics | null>(null);
   const [cases, setCases] = React.useState<DsrCase[] | null>(null);
   const [projects, setProjects] = React.useState<Project[] | null>(null);
+  const [audit, setAudit] = React.useState<AuditEvent[] | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -47,18 +48,22 @@ export function DashboardPage() {
     platform().dashboard.metrics().then(setMetrics);
     platform().cases.list().then(setCases);
     platform().projects.list().then(setProjects);
+    platform().audit.list().then(setAudit);
   }, []);
 
-  if (!metrics || !cases || !projects) return <Spinner label="Loading dashboard…" />;
+  if (!metrics || !cases || !projects || !audit) return <Spinner label="Loading dashboard…" />;
 
   const recent = [...cases]
-    .sort((a, b) => b.sla.receivedDate.localeCompare(a.sla.receivedDate));
+    .sort((a, b) => b.sla.receivedDate.localeCompare(a.sla.receivedDate))
+    .slice(0, 5);
 
   const recentProjects = [...projects]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5);
 
-  const recentActivity = [...cases]
-    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  const recentActivity = [...audit]
+    .sort((a, b) => b.utc.localeCompare(a.utc))
+    .slice(0, 10);
 
   return (
     <div>
@@ -84,10 +89,10 @@ export function DashboardPage() {
         <Metric icon={<Trash2 className="h-4 w-4" />} label="Deletions" value={metrics.deletionCount} tone="danger" />
         <Metric icon={<BellOff className="h-4 w-4" />} label="Unsubscribe" value={metrics.unsubscribeCount} tone="warn" />
         <Metric icon={<Ban className="h-4 w-4" />} label="Do Not Sell" value={metrics.doNotSaleCount} tone="danger" />
-        <Metric icon={<PenLine className="h-4 w-4" />} label="Corrections" value={metrics.correctionCount} tone="warn" />
-        <Metric icon={<Eye className="h-4 w-4" />} label="Access" value={metrics.accessCount} tone="info" />
-        <Metric icon={<Inbox className="h-4 w-4" />} label="Received this month" value={metrics.receivedThisMonth} tone="info" />
-        <Metric icon={<CheckCircle2 className="h-4 w-4" />} label="Closed" value={metrics.closedThisMonth} tone="success" />
+        <Metric icon={<FolderPlus className="h-4 w-4" />} label="Total projects" value={metrics.totalProjects} tone="info" />
+        <Metric icon={<ClipboardList className="h-4 w-4" />} label="Active projects" value={metrics.activeProjects} tone="warn" />
+        <Metric icon={<Inbox className="h-4 w-4" />} label="Projects this month" value={metrics.projectsThisMonth} tone="info" />
+        <Metric icon={<CheckCircle2 className="h-4 w-4" />} label="Closed projects this month" value={metrics.closedProjectsThisMonth} tone="success" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -131,7 +136,7 @@ export function DashboardPage() {
               {recentProjects.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => navigate('/tasks')}
+                  onClick={() => navigate(`/projects/${p.id}`)}
                   className="flex items-center gap-4 rounded-xl border border-line px-4 py-3 text-left transition-all hover:bg-[var(--pf-highlight)] focus-ring"
                 >
                   <div className="min-w-0 flex-1">
@@ -153,11 +158,12 @@ export function DashboardPage() {
       <GlassPanel className="mt-4">
         <h3 className="mb-3 text-sm font-semibold text-ink">Recent activity</h3>
         <div className="flex max-h-[210px] flex-col gap-1.5 overflow-y-auto pr-1">
-          {recentActivity.map((c) => (
-            <div key={c.id} className="flex items-center gap-3 py-1.5 text-sm">
-              <GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge>
-              <button className="text-accent focus-ring" onClick={() => navigate(`/cases/${c.id}`)}>{c.caseNumber}</button>
-              <span className="truncate text-muted">{c.subject.lastName} — {c.requestTypes.join(', ')}</span>
+          {recentActivity.map((event) => (
+            <div key={event.id} className="flex items-center gap-3 py-1.5 text-sm">
+              <GlassBadge tone="neutral">{event.category}</GlassBadge>
+              <Activity className="h-3.5 w-3.5 shrink-0 text-muted" />
+              <span className="min-w-0 flex-1 truncate text-muted">{event.summary}</span>
+              <span className="shrink-0 text-[11px] text-muted">{fmtDate(event.utc)}</span>
             </div>
           ))}
         </div>

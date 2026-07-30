@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Download, FolderPlus, ListChecks, CalendarDays, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import { Search, Download, FolderPlus, ListChecks, CalendarDays, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Layers } from 'lucide-react';
 import { platform } from '../../platform';
 import type { Project } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
@@ -13,16 +13,30 @@ import { useAuth, can } from '../../store/auth';
 
 const SOURCES = ['DD', 'SSDS', 'Lighthouse'];
 const PAGE_SIZE = 15;
+const FILTERS_KEY = 'privacyflow.projects.filters.v1';
+
+function readFilters(): { q: string; source: string; statusFilter: string; sort: 'recent' | 'name' | 'date'; page: number } {
+  try {
+    return {
+      q: '',
+      source: 'all',
+      statusFilter: 'all',
+      sort: 'recent',
+      page: 0,
+      ...JSON.parse(localStorage.getItem(FILTERS_KEY) || '{}'),
+    };
+  } catch {
+    return { q: '', source: 'all', statusFilter: 'all', sort: 'recent', page: 0 };
+  }
+}
 
 function displayDate(p: Project): string {
   if (p.notificationCancelled) return 'Cancelled';
   return fmtDate(p.dateNotificationReceived);
 }
 
-// Group key: projects with the same name (case-insensitive) become children of
-// one parent row. Names differing only by whitespace/case still group together.
-function groupKey(p: Project): string {
-  return p.projectName.trim().toLowerCase();
+function normalizedGroupValue(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 interface ProjectGroup {
@@ -44,12 +58,14 @@ export function TasksPage() {
   const year = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : null;
 
   const [projects, setProjects] = React.useState<Project[] | null>(null);
-  const [q, setQ] = React.useState('');
-  const [source, setSource] = React.useState<'all' | string>('all');
-  const [statusFilter, setStatusFilter] = React.useState<'all' | string>('all');
-  const [sort, setSort] = React.useState<'recent' | 'name' | 'date'>('recent');
+  const savedFilters = React.useMemo(readFilters, []);
+  const [q, setQ] = React.useState(savedFilters.q);
+  const [source, setSource] = React.useState<'all' | string>(savedFilters.source);
+  const [statusFilter, setStatusFilter] = React.useState<'all' | string>(savedFilters.statusFilter);
+  const [sort, setSort] = React.useState<'recent' | 'name' | 'date'>(savedFilters.sort);
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
-  const [page, setPage] = React.useState(0);
+  const [page, setPage] = React.useState(savedFilters.page);
+  const didInitFilters = React.useRef(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -67,8 +83,16 @@ export function TasksPage() {
   }, [year]);
 
   React.useEffect(() => {
+    if (!didInitFilters.current) {
+      didInitFilters.current = true;
+      return;
+    }
     setPage(0);
   }, [year, q, source, statusFilter, sort]);
+
+  React.useEffect(() => {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({ q, source, statusFilter, sort, page }));
+  }, [q, source, statusFilter, sort, page]);
 
   if (!projects) return <Spinner label="Loading projects…" />;
 
@@ -92,18 +116,37 @@ export function TasksPage() {
     return b.createdAt.localeCompare(a.createdAt);
   });
 
-  // ---- Parent/child grouping by project name -------------------------------
+  // ---- Parent/child grouping by project name or project number -------------
   const groups: ProjectGroup[] = [];
-  const byKey = new Map<string, ProjectGroup>();
+  const byName = new Map<string, ProjectGroup>();
+  const byNumber = new Map<string, ProjectGroup>();
+  const indexGroup = (g: ProjectGroup) => {
+    for (const child of g.children) {
+      const nameKey = normalizedGroupValue(child.projectName);
+      const numberKey = normalizedGroupValue(child.projectNumber);
+      if (nameKey) byName.set(nameKey, g);
+      if (numberKey) byNumber.set(numberKey, g);
+    }
+  };
+
   for (const p of visible) {
-    const key = groupKey(p);
-    let g = byKey.get(key);
+    const nameKey = normalizedGroupValue(p.projectName);
+    const numberKey = normalizedGroupValue(p.projectNumber);
+    const nameGroup = nameKey ? byName.get(nameKey) : undefined;
+    const numberGroup = numberKey ? byNumber.get(numberKey) : undefined;
+    let g = nameGroup ?? numberGroup;
     if (!g) {
-      g = { key, name: p.projectName.trim(), children: [] };
-      byKey.set(key, g);
+      g = { key: p.id, name: p.projectName.trim(), children: [] };
       groups.push(g);
+    } else if (nameGroup && numberGroup && nameGroup !== numberGroup) {
+      nameGroup.children.push(...numberGroup.children);
+      const index = groups.indexOf(numberGroup);
+      if (index >= 0) groups.splice(index, 1);
+      g = nameGroup;
+      indexGroup(g);
     }
     g.children.push(p);
+    indexGroup(g);
   }
   for (const g of groups) {
     g.children.sort((a, b) => {
@@ -242,24 +285,26 @@ export function TasksPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[240px] flex-1">
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <GlassInput className="pl-9" placeholder="Search project number, name, RITM…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <GlassSelect className="w-44" value={source} onChange={(e) => setSource(e.target.value)}>
-          <option value="all">All sources</option>
-          {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </GlassSelect>
-        <GlassSelect className="w-52" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="all">All statuses</option>
-          {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </GlassSelect>
-        <GlassSelect className="w-44" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-          <option value="recent">Sort: Recent</option>
-          <option value="name">Sort: Name</option>
-          <option value="date">Sort: Notification date</option>
-        </GlassSelect>
+        <div className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1">
+          <GlassSelect className="w-44 shrink-0" value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="all">All sources</option>
+            {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </GlassSelect>
+          <GlassSelect className="w-52 shrink-0" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">All statuses</option>
+            {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </GlassSelect>
+          <GlassSelect className="w-44 shrink-0" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="recent">Sort: Recent</option>
+            <option value="name">Sort: Name</option>
+            <option value="date">Sort: Notification date</option>
+          </GlassSelect>
+        </div>
       </div>
 
       <div className="content-surface overflow-x-auto">
@@ -360,6 +405,14 @@ export function TasksPage() {
             <GlassButton
               className="px-3 py-1.5"
               disabled={currentPage === 0}
+              onClick={() => setPage(0)}
+              title="First page"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </GlassButton>
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage === 0}
               onClick={() => setPage((p) => Math.max(p - 1, 0))}
             >
               <ChevronLeft className="h-4 w-4" /> Previous
@@ -373,6 +426,14 @@ export function TasksPage() {
               onClick={() => setPage((p) => Math.min(p + 1, pageCount - 1))}
             >
               Next <ChevronRight className="h-4 w-4" />
+            </GlassButton>
+            <GlassButton
+              className="px-3 py-1.5"
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setPage(pageCount - 1)}
+              title="Last page"
+            >
+              <ChevronsRight className="h-4 w-4" />
             </GlassButton>
           </div>
         </div>

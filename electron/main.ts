@@ -79,7 +79,7 @@ if (isUserDataWorkspacePath(dbPath)) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 }
 
-const BACKUP_LIMIT = 30;
+const BACKUP_LIMIT = 10;
 const SYNC_DEBOUNCE_MS = 1500;
 
 interface WorkspaceSyncState {
@@ -390,10 +390,71 @@ function deleteBackup(fileName: string): boolean {
 }
 
 let lock = new WorkspaceLock(dbPath, os.userInfo().username);
-let lockState: LockState = lock.acquire();
-initializeWorkspaceCache();
+let lockState: LockState = {
+  mode: 'read-only',
+  holder: { user: 'PrivacyFlow', machine: os.hostname(), pid: process.pid, since: '', heartbeat: '' },
+  stale: false,
+};
+let workspaceReady = false;
 
 let mainWindow: BrowserWindow | null = null;
+
+function ensureWorkspaceReady(): void {
+  if (workspaceReady) return;
+  lockState = lock.acquire();
+  initializeWorkspaceCache();
+  workspaceReady = true;
+}
+
+function splashHtml(): string {
+  return `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid;
+      place-items: center;
+      background: radial-gradient(900px 600px at 20% 0%, rgba(41, 121, 255, .22), transparent 60%), #0b1020;
+      color: #f8fafc;
+      font-family: Inter, Segoe UI, system-ui, sans-serif;
+    }
+    .panel { text-align: center; }
+    .mark {
+      width: 54px; height: 54px; margin: 0 auto 18px; border-radius: 16px;
+      background: rgba(255,255,255,.12); display: grid; place-items: center;
+      box-shadow: 0 18px 60px rgba(0,0,0,.35);
+    }
+    .spinner {
+      width: 22px; height: 22px; border: 3px solid rgba(255,255,255,.25);
+      border-top-color: #8bd5ff; border-radius: 50%; animation: spin .9s linear infinite;
+    }
+    h1 { margin: 0; font-size: 18px; }
+    p { margin: 8px 0 0; color: rgba(248,250,252,.7); font-size: 13px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="mark"><div class="spinner"></div></div>
+    <h1>Starting PrivacyFlow</h1>
+    <p>Loading and syncing the shared workspace...</p>
+  </div>
+</body>
+</html>`;
+}
+
+async function loadAppWindow(): Promise<void> {
+  ensureWorkspaceReady();
+  if (!mainWindow) return;
+  if (isDev) {
+    await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173');
+  } else {
+    await mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -412,11 +473,10 @@ function createWindow() {
     },
   });
 
-  if (isDev) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173');
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
-  }
+  mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml())}`);
+  setTimeout(() => {
+    void loadAppWindow();
+  }, 50);
 }
 
 ipcMain.handle('window:minimize', () => {
@@ -441,6 +501,7 @@ ipcMain.handle('window:close', () => {
 // Read synchronously at boot so the renderer's platform layer stays simple.
 ipcMain.on('workspace:read', (event) => {
   try {
+    ensureWorkspaceReady();
     event.returnValue = workspaceReadRaw();
   } catch {
     event.returnValue = null;
@@ -448,6 +509,7 @@ ipcMain.on('workspace:read', (event) => {
 });
 
 ipcMain.handle('workspace:write', async (_e, json: string) => {
+  ensureWorkspaceReady();
   if (lockState.mode !== 'write') {
     const holder = lockState.mode === 'read-only' ? lockState.holder : null;
     throw new Error(
@@ -471,28 +533,37 @@ ipcMain.handle('workspace:write', async (_e, json: string) => {
   return true;
 });
 
-ipcMain.handle('workspace:lockStatus', async () => lockState);
+ipcMain.handle('workspace:lockStatus', async () => {
+  ensureWorkspaceReady();
+  return lockState;
+});
 
 ipcMain.handle('workspace:recheckLock', async () => {
+  ensureWorkspaceReady();
   lockState = lock.recheck();
   initializeWorkspaceCache();
   return lockState;
 });
 
 ipcMain.handle('workspace:claimStale', async () => {
+  ensureWorkspaceReady();
   lockState = lock.claimStale();
   initializeWorkspaceCache();
   return lockState;
 });
 
-ipcMain.handle('workspace:info', async () => ({
-  dbPath,
-  lockState,
-  persisted: readWorkspacePreference() === dbPath || !!process.env.PRIVACYFLOW_WORKSPACE,
-  sync: syncState,
-}));
+ipcMain.handle('workspace:info', async () => {
+  ensureWorkspaceReady();
+  return {
+    dbPath,
+    lockState,
+    persisted: readWorkspacePreference() === dbPath || !!process.env.PRIVACYFLOW_WORKSPACE,
+    sync: syncState,
+  };
+});
 
 ipcMain.handle('workspace:syncNow', async () => {
+  ensureWorkspaceReady();
   syncLocalCacheNow();
   return {
     dbPath,
@@ -506,6 +577,7 @@ ipcMain.handle('workspace:syncNow', async () => {
 // Settings. Releases the current lock, switches path, and re-acquires. The
 // renderer reloads afterwards so all data is re-read from the new location.
 ipcMain.handle('workspace:choosePath', async () => {
+  ensureWorkspaceReady();
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Choose the shared workspace folder',
@@ -815,6 +887,7 @@ app.whenReady().then(() => {
 });
 
 function flushAndReleaseLock(): void {
+  if (!workspaceReady) return;
   try {
     if (syncTimer) {
       clearTimeout(syncTimer);

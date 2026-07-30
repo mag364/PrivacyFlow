@@ -750,6 +750,15 @@ function computeMetrics(d: Db): DashboardMetrics {
   const receivedThisMonth = d.cases.filter(
     (c) => isSameMonth(parseISO(c.sla.receivedDate), now),
   ).length;
+  const projectClosedStatuses = new Set(['Approved', 'Denied', 'Closed']);
+  const projectDateThisMonth = (value?: string) => {
+    if (!value) return false;
+    try {
+      return isSameMonth(parseISO(value), now);
+    } catch {
+      return false;
+    }
+  };
 
   return {
     openCases: open.length,
@@ -765,6 +774,10 @@ function computeMetrics(d: Db): DashboardMetrics {
     doNotSaleCount: openWithType('Do Not Sell'),
     receivedThisMonth,
     closedThisMonth: completedThisMonth,
+    totalProjects: d.projects.length,
+    activeProjects: d.projects.filter((p) => !projectClosedStatuses.has(p.status)).length,
+    projectsThisMonth: d.projects.filter((p) => projectDateThisMonth(p.dateNotificationReceived ?? p.createdAt)).length,
+    closedProjectsThisMonth: d.projects.filter((p) => projectClosedStatuses.has(p.status) && projectDateThisMonth(p.createdAt)).length,
   };
 }
 
@@ -1369,6 +1382,22 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         if (!c) throw new Error('Case not found');
         const before = clone(c);
         Object.assign(c, patch);
+        const hasStandardResponse = !!c.intakeDates?.standardResponseSent;
+        const hasForwardedToRon = !!c.intakeDates?.forwardedEmailToRon;
+        const hasFollowUp = !!c.intakeDates?.followUpEmailSent;
+        const hasClosed = !!c.sla?.closureDate || !!c.resolutionDate;
+        const inferredStatus = hasClosed
+          ? 'Closed'
+          : hasFollowUp
+            ? 'Follow-up Email Sent'
+            : hasForwardedToRon
+              ? 'Email Ron K.'
+              : hasStandardResponse
+                ? 'Email Response Sent'
+                : null;
+        if (inferredStatus && CASE_STATUSES.includes(inferredStatus) && c.status !== inferredStatus) {
+          c.status = inferredStatus;
+        }
         c.updatedAt = new Date().toISOString();
         c.lastActivityAt = c.updatedAt;
         const changed = diffSummary(before as unknown as Record<string, unknown>, c as unknown as Record<string, unknown>);
@@ -1389,13 +1418,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           const automationFields = changedAutomationFields(before, c);
           await runAutomations(d, c, 'case.updated', { changedFields: automationFields });
           const hadStandardResponse = !!before.intakeDates?.standardResponseSent;
-          const hasStandardResponse = !!c.intakeDates?.standardResponseSent;
           const hadForwardedToRon = !!before.intakeDates?.forwardedEmailToRon;
-          const hasForwardedToRon = !!c.intakeDates?.forwardedEmailToRon;
           const hadFollowUp = !!before.intakeDates?.followUpEmailSent;
-          const hasFollowUp = !!c.intakeDates?.followUpEmailSent;
-          const hadClosed = !!before.sla?.closureDate;
-          const hasClosed = !!c.sla?.closureDate;
+          const hadClosed = !!before.sla?.closureDate || !!before.resolutionDate;
           if (!hadStandardResponse && hasStandardResponse) {
             await runAutomations(d, c, 'status.changed', { toStatus: 'Email Response Sent' });
           }

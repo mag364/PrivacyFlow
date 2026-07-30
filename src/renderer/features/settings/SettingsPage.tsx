@@ -1025,7 +1025,7 @@ function BackupRestoreTab() {
       </div>
 
       <p className="mt-3 text-[11px] text-muted">
-        Automatic backups are stored locally on this PC, not on the shared drive. The newest 30 valid
+        Automatic backups are stored locally on this PC, not on the shared drive. The newest 10 valid
         workspace backups are kept.
       </p>
       {message && <p className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{message}</p>}

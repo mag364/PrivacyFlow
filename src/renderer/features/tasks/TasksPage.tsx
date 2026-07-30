@@ -290,16 +290,16 @@ export function TasksPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <GlassInput className="pl-9" placeholder="Search project number, name, RITM…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <div className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1">
-          <GlassSelect className="w-44 shrink-0" value={source} onChange={(e) => setSource(e.target.value)}>
+        <div className="grid grid-cols-3 gap-3">
+          <GlassSelect value={source} onChange={(e) => setSource(e.target.value)}>
             <option value="all">All sources</option>
             {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
           </GlassSelect>
-          <GlassSelect className="w-52 shrink-0" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <GlassSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
             {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </GlassSelect>
-          <GlassSelect className="w-44 shrink-0" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+          <GlassSelect value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
             <option value="recent">Sort: Recent</option>
             <option value="name">Sort: Name</option>
             <option value="date">Sort: Notification date</option>

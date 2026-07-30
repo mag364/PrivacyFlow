@@ -169,14 +169,14 @@ export function CasesPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <GlassInput className="pl-9" placeholder="Search request number, name, email…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <div className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1">
-          <GlassSelect className="w-56 shrink-0" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <div className="grid grid-cols-2 gap-3">
+          <GlassSelect value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="all">All statuses</option>
             <option value="open">Open requests</option>
             <option value="closed">Closed requests</option>
             {CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </GlassSelect>
-          <GlassSelect className="w-44 shrink-0" value={type} onChange={(e) => setType(e.target.value)}>
+          <GlassSelect value={type} onChange={(e) => setType(e.target.value)}>
             <option value="all">All types</option>
             {REQUEST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </GlassSelect>

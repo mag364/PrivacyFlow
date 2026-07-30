@@ -5,6 +5,7 @@ import {
   LayoutDashboard, FolderKanban, ListChecks, BarChart3, Workflow,
   ShieldCheck, Settings, LogOut, Plus, Lock, RefreshCw, KeyRound, X,
   ChevronDown, CalendarDays, PlusCircle, PackageCheck, ExternalLink,
+  Minus, Maximize2, Minimize2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { can, useAuth } from '../store/auth';
@@ -17,6 +18,7 @@ import { initials, fmtDateTime } from '../lib/format';
 import privacyFlowIcon from '../assets/privacyflow-icon.png';
 import {
   currentLockState, refreshLockState, recheckLock, claimStaleLock, workspaceBridge,
+  windowControlsBridge,
   type WorkspaceLockState,
 } from '../platform/workspace';
 import type { AvailableRelease } from '../features/auth/LoginPage';
@@ -70,6 +72,55 @@ function useLockState(): WorkspaceLockState {
     return () => clearInterval(t);
   }, []);
   return state;
+}
+
+function WindowTitleBar() {
+  const controls = windowControlsBridge();
+  const [maximized, setMaximized] = React.useState(false);
+  if (!controls) return null;
+
+  async function toggleMaximize() {
+    setMaximized(await controls!.toggleMaximize());
+  }
+
+  return (
+    <div className="app-drag-region sticky top-0 z-50 flex h-10 shrink-0 items-center border-b border-line bg-[var(--pf-surface)]/78 px-3 backdrop-blur-xl">
+      <div className="flex min-w-0 items-center gap-2">
+        <img src={privacyFlowIcon} alt="" className="h-5 w-5 rounded-md object-cover" />
+        <span className="truncate text-xs font-semibold text-ink">{APP_CONFIG.productName}</span>
+        <span className="hidden text-[11px] text-muted sm:inline">{APP_CONFIG.tagline}</span>
+      </div>
+      <div className="app-no-drag ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => void controls.minimize()}
+          className="grid h-7 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-[var(--pf-highlight)] hover:text-ink focus-ring"
+          title="Minimize"
+          aria-label="Minimize window"
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => void toggleMaximize()}
+          className="grid h-7 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-[var(--pf-highlight)] hover:text-ink focus-ring"
+          title={maximized ? 'Restore' : 'Maximize'}
+          aria-label={maximized ? 'Restore window' : 'Maximize window'}
+        >
+          {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => void controls.close()}
+          className="grid h-7 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-red-500/80 hover:text-white focus-ring"
+          title="Close"
+          aria-label="Close window"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function PageHeader({
@@ -380,6 +431,7 @@ export function AppShell({
   const readOnly = lockState.mode === 'read-only';
   const holder = readOnly ? lockState.holder : null;
   const role = user?.role;
+  const hasWindowTitleBar = !!windowControlsBridge();
 
   async function handleLogout() {
     await logout();
@@ -387,8 +439,15 @@ export function AppShell({
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-64 flex-col gap-2 border-r border-line bg-[var(--pf-surface)] px-4 py-6 backdrop-blur-xl md:flex">
+    <div className="flex min-h-screen flex-col">
+      <WindowTitleBar />
+      <div className="flex min-h-0 flex-1">
+      <aside
+        className={clsx(
+          'sticky hidden w-64 flex-col gap-2 border-r border-line bg-[var(--pf-surface)] px-4 py-6 backdrop-blur-xl md:flex',
+          hasWindowTitleBar ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen',
+        )}
+      >
         <div className="mb-6 flex items-center gap-3 px-2">
           <img src={privacyFlowIcon} alt="" className="h-10 w-10 rounded-2xl object-cover shadow-glass" />
           <div>
@@ -502,7 +561,12 @@ export function AppShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-[var(--pf-surface)] px-6 py-3 backdrop-blur-xl md:hidden">
+        <header
+          className={clsx(
+            'sticky z-10 flex items-center gap-3 border-b border-line bg-[var(--pf-surface)] px-6 py-3 backdrop-blur-xl md:hidden',
+            hasWindowTitleBar ? 'top-10' : 'top-0',
+          )}
+        >
           <img src={privacyFlowIcon} alt="" className="h-8 w-8 rounded-xl object-cover shadow-glass" />
           <span className="text-sm font-bold text-ink">{APP_CONFIG.productName}</span>
           {readOnly && (
@@ -524,6 +588,7 @@ export function AppShell({
           <WorkspaceBanner state={lockState} />
           {children}
         </main>
+      </div>
       </div>
     </div>
   );

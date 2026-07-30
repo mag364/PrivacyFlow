@@ -159,6 +159,12 @@ export interface OutlookBridge {
   openDraft: (input: MailDraftInput & { accountEmail?: string }) => Promise<boolean>;
 }
 
+export interface WindowControlsBridge {
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<boolean>;
+  close: () => Promise<void>;
+}
+
 const WRITE_STATE: WorkspaceLockState = {
   mode: 'write',
   info: { user: '', machine: '', pid: 0, since: '', heartbeat: '' },
@@ -172,6 +178,7 @@ interface Injected {
   mail?: MailBridge;
   graph?: M365GraphBridge;
   outlook?: OutlookBridge;
+  windowControls?: WindowControlsBridge;
 }
 
 function injected(): Injected {
@@ -200,6 +207,10 @@ export function graphBridge(): M365GraphBridge | null {
 
 export function outlookBridge(): OutlookBridge | null {
   return injected().outlook ?? null;
+}
+
+export function windowControlsBridge(): WindowControlsBridge | null {
+  return injected().windowControls ?? null;
 }
 
 // Cached lock state, refreshed at startup and on demand by the UI.

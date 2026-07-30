@@ -20,7 +20,7 @@
 // at runtime from Settings → Workspace.
 // -----------------------------------------------------------------------------
 
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -402,6 +402,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 720,
     backgroundColor: '#0b1020',
+    frame: false,
     icon: path.join(__dirname, '../../assets/privacyflow-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -417,6 +418,25 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
 }
+
+ipcMain.handle('window:minimize', () => {
+  BrowserWindow.getFocusedWindow()?.minimize();
+});
+
+ipcMain.handle('window:toggleMaximize', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (!win) return false;
+  if (win.isMaximized()) {
+    win.unmaximize();
+    return false;
+  }
+  win.maximize();
+  return true;
+});
+
+ipcMain.handle('window:close', () => {
+  BrowserWindow.getFocusedWindow()?.close();
+});
 
 // Read synchronously at boot so the renderer's platform layer stays simple.
 ipcMain.on('workspace:read', (event) => {
@@ -780,6 +800,7 @@ $mail.Display($false)
 });
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   createWindow();
   setTimeout(() => {
     try {

@@ -48,4 +48,9 @@ contextBridge.exposeInMainWorld('privacyflow', {
     openDraft: (input: { accountEmail?: string; to: string; subject: string; body: string }) =>
       ipcRenderer.invoke('outlook:openDraft', input),
   },
+  windowControls: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+  },
 });

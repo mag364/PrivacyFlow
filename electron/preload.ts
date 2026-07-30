@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('privacyflow', {
   updater: {
     downloadReleaseAsset: (input: { assetApiUrl: string; token?: string; fileName: string }) =>
       ipcRenderer.invoke('updater:downloadReleaseAsset', input),
+    getApplicationFolder: () => ipcRenderer.invoke('updater:getApplicationFolder'),
+    chooseApplicationFolder: () => ipcRenderer.invoke('updater:chooseApplicationFolder'),
+    applyReleaseAsset: (input: { assetApiUrl: string; token?: string; fileName: string; appFolder?: string }) =>
+      ipcRenderer.invoke('updater:applyReleaseAsset', input),
   },
   backup: {
     list: () => ipcRenderer.invoke('backup:list'),

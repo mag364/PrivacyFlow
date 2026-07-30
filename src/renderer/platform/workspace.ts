@@ -46,6 +46,20 @@ export interface DownloadUpdateResult {
   opened: boolean;
 }
 
+export interface ApplicationFolderInfo {
+  folderPath: string;
+  valid: boolean;
+  message?: string;
+}
+
+export interface ApplyUpdateResult {
+  filePath: string;
+  appFolder: string;
+  updaterScriptPath?: string;
+  mode: 'automatic' | 'download-only';
+  message?: string;
+}
+
 export interface BackupEntry {
   id: string;
   fileName: string;
@@ -73,6 +87,9 @@ export interface WorkspaceBridge {
 
 export interface UpdaterBridge {
   downloadReleaseAsset: (input: DownloadUpdateInput) => Promise<DownloadUpdateResult>;
+  getApplicationFolder?: () => Promise<ApplicationFolderInfo>;
+  chooseApplicationFolder?: () => Promise<ApplicationFolderInfo | null>;
+  applyReleaseAsset?: (input: DownloadUpdateInput & { appFolder?: string }) => Promise<ApplyUpdateResult>;
 }
 
 export interface BackupBridge {

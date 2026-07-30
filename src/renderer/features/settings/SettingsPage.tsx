@@ -18,7 +18,7 @@ import { useAuth, can } from '../../store/auth';
 import { fmtDateTime } from '../../lib/format';
 import {
   workspaceBridge, updaterBridge, workspaceInfo, chooseWorkspacePath, syncWorkspaceNow, type WorkspaceInfo,
-  outlookBridge, mailBridge, graphBridge, backupBridge, type BackupEntry,
+  outlookBridge, mailBridge, graphBridge, backupBridge, type BackupEntry, type ApplicationFolderInfo,
 } from '../../platform/workspace';
 import { APP_CONFIG } from '@shared/config';
 import type { ImportSummary } from '../../platform/types';
@@ -67,7 +67,7 @@ type UpdateState =
   | { status: 'idle' }
   | { status: 'checking' }
   | { status: 'downloading'; release: GitHubRelease; asset: GitHubReleaseAsset }
-  | { status: 'downloaded'; release: GitHubRelease; fileName: string }
+  | { status: 'downloaded'; release: GitHubRelease; fileName: string; mode?: 'automatic' | 'download-only' }
   | { status: 'no_release' }
   | { status: 'current'; release: GitHubRelease }
   | { status: 'available'; release: GitHubRelease; asset: GitHubReleaseAsset }
@@ -254,6 +254,8 @@ function UpdateSection() {
   const [state, setState] = React.useState<UpdateState>({ status: 'idle' });
   const [token, setToken] = React.useState(() => readStoredUpdateToken());
   const [rememberToken, setRememberToken] = React.useState(() => !!readStoredUpdateToken());
+  const [appFolder, setAppFolder] = React.useState<ApplicationFolderInfo | null>(null);
+  const [folderBusy, setFolderBusy] = React.useState(false);
 
   const currentVersion = APP_CONFIG.version;
   const release =
@@ -264,6 +266,36 @@ function UpdateSection() {
       ? state.release
       : null;
   const needsTokenHelp = state.status === 'error' && /private repository|access|token/i.test(state.message);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const desktopUpdater = updaterBridge();
+    if (!desktopUpdater?.getApplicationFolder) return;
+    desktopUpdater.getApplicationFolder()
+      .then((info) => {
+        if (!cancelled) setAppFolder(info);
+      })
+      .catch(() => {
+        if (!cancelled) setAppFolder(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function chooseApplicationFolder() {
+    const desktopUpdater = updaterBridge();
+    if (!desktopUpdater?.chooseApplicationFolder) return;
+    setFolderBusy(true);
+    try {
+      const selected = await desktopUpdater.chooseApplicationFolder();
+      if (selected) setAppFolder(selected);
+    } catch (e) {
+      setState({ status: 'error', message: e instanceof Error ? e.message : 'Unable to choose the application folder.' });
+    } finally {
+      setFolderBusy(false);
+    }
+  }
 
   async function checkForUpdates() {
     setState({ status: 'checking' });
@@ -325,12 +357,24 @@ function UpdateSection() {
     try {
       const desktopUpdater = updaterBridge();
       if (desktopUpdater) {
-        await desktopUpdater.downloadReleaseAsset({
+        const result = desktopUpdater.applyReleaseAsset
+          ? await desktopUpdater.applyReleaseAsset({
+            assetApiUrl: asset.url,
+            token: trimmedToken || undefined,
+            fileName: asset.name,
+            appFolder: appFolder?.folderPath,
+          })
+          : await desktopUpdater.downloadReleaseAsset({
           assetApiUrl: asset.url,
           token: trimmedToken || undefined,
           fileName: asset.name,
         });
-        setState({ status: 'downloaded', release: availableRelease, fileName: asset.name });
+        setState({
+          status: 'downloaded',
+          release: availableRelease,
+          fileName: asset.name,
+          mode: 'mode' in result ? result.mode : 'download-only',
+        });
         return;
       }
 
@@ -404,6 +448,27 @@ function UpdateSection() {
         </label>
       </div>
 
+      {updaterBridge() && (
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+          <Field
+            label="Application folder"
+            hint="Choose the extracted PrivacyFlow folder that contains PrivacyFlow.exe. Automatic ZIP updates replace this folder after the app closes."
+          >
+            <GlassInput
+              value={appFolder?.folderPath ?? ''}
+              readOnly
+              placeholder="Choose the extracted PrivacyFlow folder"
+            />
+            {appFolder && !appFolder.valid && (
+              <p className="mt-1 text-[11px] text-red-200">{appFolder.message}</p>
+            )}
+          </Field>
+          <GlassButton variant="subtle" loading={folderBusy} onClick={chooseApplicationFolder} className="self-end">
+            <FolderOpen className="h-4 w-4" /> Choose folder
+          </GlassButton>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <GlassButton loading={state.status === 'checking'} onClick={checkForUpdates}>
           <RefreshCw className="h-4 w-4" /> Check for updates
@@ -446,14 +511,15 @@ function UpdateSection() {
 
       {state.status === 'available' && (
         <p className="text-[11px] text-muted">
-          The update button downloads the folder-based Windows ZIP when available, then opens it from
-          your Downloads folder. Close PrivacyFlow, extract the ZIP, and run PrivacyFlow.exe from the extracted folder.
+          The update button downloads the folder-based Windows ZIP when available. In the desktop app it can close PrivacyFlow,
+          apply the ZIP to the selected application folder, and reopen the updated app automatically.
         </p>
       )}
       {state.status === 'downloaded' && (
         <p className="text-[11px] text-muted">
-          Downloaded {state.fileName}. If Windows did not open it automatically, open it from your Downloads folder.
-          Close PrivacyFlow, extract the ZIP if needed, and run PrivacyFlow.exe from the updated folder.
+          {state.mode === 'automatic'
+            ? `Downloaded ${state.fileName}. PrivacyFlow will close and the updater will apply it to the selected folder.`
+            : `Downloaded ${state.fileName}. If Windows did not open it automatically, open it from your Downloads folder. Close PrivacyFlow, extract the ZIP if needed, and run PrivacyFlow.exe from the updated folder.`}
         </p>
       )}
     </div>

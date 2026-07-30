@@ -25,7 +25,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { WorkspaceLock, type LockState } from './lockfile';
 
 const isDev = !app.isPackaged;
@@ -44,6 +44,101 @@ function uniqueDownloadPath(fileName: string): string {
     index += 1;
   }
   return candidate;
+}
+
+function applicationFolderPreferencePath(): string {
+  return path.join(app.getPath('userData'), 'application-folder.json');
+}
+
+function currentApplicationFolder(): string {
+  return path.dirname(process.execPath);
+}
+
+function readApplicationFolderPreference(): string {
+  try {
+    const raw = fs.readFileSync(applicationFolderPreferencePath(), 'utf8');
+    const parsed = JSON.parse(raw) as { folderPath?: string };
+    const saved = String(parsed.folderPath || '').trim();
+    return saved || currentApplicationFolder();
+  } catch {
+    return currentApplicationFolder();
+  }
+}
+
+function writeApplicationFolderPreference(folderPath: string): void {
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  fs.writeFileSync(applicationFolderPreferencePath(), JSON.stringify({ folderPath }, null, 2), 'utf8');
+}
+
+function applicationFolderInfo(folderPath: string): { folderPath: string; valid: boolean; message?: string } {
+  const resolved = path.resolve(String(folderPath || '').trim() || currentApplicationFolder());
+  const exePath = path.join(resolved, 'PrivacyFlow.exe');
+  if (!fs.existsSync(resolved)) {
+    return { folderPath: resolved, valid: false, message: 'Folder does not exist.' };
+  }
+  if (!fs.existsSync(exePath)) {
+    return { folderPath: resolved, valid: false, message: 'PrivacyFlow.exe was not found in this folder.' };
+  }
+  return { folderPath: resolved, valid: true };
+}
+
+function psLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function downloadReleaseAsset(input: { assetApiUrl?: string; token?: string; fileName?: string }): Promise<string> {
+  const assetApiUrl = String(input?.assetApiUrl || '').trim();
+  const token = String(input?.token || '').trim();
+  if (!assetApiUrl || !assetApiUrl.startsWith('https://api.github.com/')) {
+    throw new Error('A valid GitHub release asset URL is required.');
+  }
+
+  const res = await fetch(assetApiUrl, {
+    headers: {
+      Accept: 'application/octet-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!res.ok) throw new Error(`Update download failed with HTTP ${res.status}.`);
+
+  const filePath = uniqueDownloadPath(input?.fileName || 'PrivacyFlow-update.exe');
+  const buffer = Buffer.from(await res.arrayBuffer());
+  fs.writeFileSync(filePath, buffer);
+  return filePath;
+}
+
+function writeUpdaterScript(input: { zipPath: string; appFolder: string }): string {
+  const scriptDir = path.join(app.getPath('temp'), 'PrivacyFlow-updater');
+  fs.mkdirSync(scriptDir, { recursive: true });
+  const scriptPath = path.join(scriptDir, `Apply-PrivacyFlow-Update-${Date.now()}.ps1`);
+  const backupRoot = path.join(app.getPath('downloads'), 'PrivacyFlow backups');
+  const lines = [
+    '$ErrorActionPreference = "Stop"',
+    `$ZipPath = ${psLiteral(input.zipPath)}`,
+    `$AppFolder = ${psLiteral(input.appFolder)}`,
+    `$BackupRoot = ${psLiteral(backupRoot)}`,
+    `$TargetPid = ${process.pid}`,
+    'while (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }',
+    '$TempRoot = Join-Path $env:TEMP ("PrivacyFlow-update-" + [guid]::NewGuid().ToString("N"))',
+    '$ExtractRoot = Join-Path $TempRoot "extract"',
+    'New-Item -ItemType Directory -Path $ExtractRoot -Force | Out-Null',
+    'Expand-Archive -LiteralPath $ZipPath -DestinationPath $ExtractRoot -Force',
+    '$SourceFolder = Get-ChildItem -LiteralPath $ExtractRoot -Directory | Where-Object { Test-Path (Join-Path $_.FullName "PrivacyFlow.exe") } | Select-Object -First 1',
+    'if (-not $SourceFolder -and (Test-Path (Join-Path $ExtractRoot "PrivacyFlow.exe"))) { $SourcePath = $ExtractRoot }',
+    'elseif ($SourceFolder) { $SourcePath = $SourceFolder.FullName }',
+    'else { throw "The update ZIP does not contain PrivacyFlow.exe." }',
+    'if (-not (Test-Path (Join-Path $AppFolder "PrivacyFlow.exe"))) { throw "The selected app folder does not contain PrivacyFlow.exe." }',
+    'New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null',
+    '$BackupFolder = Join-Path $BackupRoot ("PrivacyFlow-app-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss"))',
+    'Copy-Item -LiteralPath $AppFolder -Destination $BackupFolder -Recurse -Force',
+    'Get-ChildItem -LiteralPath $AppFolder -Force | Remove-Item -Recurse -Force',
+    'Get-ChildItem -LiteralPath $SourcePath -Force | Copy-Item -Destination $AppFolder -Recurse -Force',
+    'Start-Process -FilePath (Join-Path $AppFolder "PrivacyFlow.exe")',
+    'Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue',
+  ];
+  fs.writeFileSync(scriptPath, lines.join('\r\n'), 'utf8');
+  return scriptPath;
 }
 
 function workspacePreferencePath(): string {
@@ -655,28 +750,73 @@ ipcMain.handle('backup:delete', async (_e, input: { fileName?: string }) => {
   return deleteBackup(fileName);
 });
 
-ipcMain.handle('updater:downloadReleaseAsset', async (_e, input: { assetApiUrl?: string; token?: string; fileName?: string }) => {
-  const assetApiUrl = String(input?.assetApiUrl || '').trim();
-  const token = String(input?.token || '').trim();
-  if (!assetApiUrl || !assetApiUrl.startsWith('https://api.github.com/')) {
-    throw new Error('A valid GitHub release asset URL is required.');
-  }
+ipcMain.handle('updater:getApplicationFolder', async () => {
+  const info = applicationFolderInfo(readApplicationFolderPreference());
+  if (!info.valid) return applicationFolderInfo(currentApplicationFolder());
+  return info;
+});
 
-  const res = await fetch(assetApiUrl, {
-    headers: {
-      Accept: 'application/octet-stream',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
+ipcMain.handle('updater:chooseApplicationFolder', async () => {
+  const current = readApplicationFolderPreference();
+  const result = await dialog.showOpenDialog({
+    title: 'Choose the extracted PrivacyFlow application folder',
+    defaultPath: fs.existsSync(current) ? current : currentApplicationFolder(),
+    properties: ['openDirectory'],
   });
-  if (!res.ok) throw new Error(`Update download failed with HTTP ${res.status}.`);
+  if (result.canceled || !result.filePaths[0]) return null;
+  const info = applicationFolderInfo(result.filePaths[0]);
+  if (!info.valid) throw new Error(info.message || 'Choose the folder that contains PrivacyFlow.exe.');
+  writeApplicationFolderPreference(info.folderPath);
+  return info;
+});
 
-  const filePath = uniqueDownloadPath(input?.fileName || 'PrivacyFlow-update.exe');
-  const buffer = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(filePath, buffer);
+ipcMain.handle('updater:downloadReleaseAsset', async (_e, input: { assetApiUrl?: string; token?: string; fileName?: string }) => {
+  const filePath = await downloadReleaseAsset(input);
   shell.showItemInFolder(filePath);
   const openError = await shell.openPath(filePath);
   return { filePath, opened: !openError };
+});
+
+ipcMain.handle('updater:applyReleaseAsset', async (_e, input: { assetApiUrl?: string; token?: string; fileName?: string; appFolder?: string }) => {
+  const fileName = safeFileName(input?.fileName || 'PrivacyFlow-update.zip');
+  if (!/\.zip$/i.test(fileName)) {
+    const filePath = await downloadReleaseAsset(input);
+    shell.showItemInFolder(filePath);
+    const openError = await shell.openPath(filePath);
+    return {
+      filePath,
+      appFolder: readApplicationFolderPreference(),
+      mode: 'download-only' as const,
+      message: openError || 'Downloaded the update package. Close PrivacyFlow before running it.',
+    };
+  }
+
+  const selectedFolder = String(input?.appFolder || readApplicationFolderPreference()).trim();
+  const info = applicationFolderInfo(selectedFolder);
+  if (!info.valid) throw new Error(info.message || 'Choose the folder that contains PrivacyFlow.exe before updating.');
+
+  const filePath = await downloadReleaseAsset(input);
+  if (process.platform !== 'win32') {
+    shell.showItemInFolder(filePath);
+    const openError = await shell.openPath(filePath);
+    return {
+      filePath,
+      appFolder: info.folderPath,
+      mode: 'download-only' as const,
+      message: openError || 'Automatic ZIP updates are only available on Windows.',
+    };
+  }
+
+  const updaterScriptPath = writeUpdaterScript({ zipPath: filePath, appFolder: info.folderPath });
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updaterScriptPath], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.unref();
+  writeApplicationFolderPreference(info.folderPath);
+  setTimeout(() => app.quit(), 300);
+  return { filePath, appFolder: info.folderPath, updaterScriptPath, mode: 'automatic' as const };
 });
 
 ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; subject?: string; body?: string }) => {

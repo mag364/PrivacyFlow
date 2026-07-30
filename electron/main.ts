@@ -473,10 +473,12 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml())}`);
-  setTimeout(() => {
-    void loadAppWindow();
-  }, 50);
+  mainWindow.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      void loadAppWindow();
+    }, 900);
+  });
+  void mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml())}`);
 }
 
 ipcMain.handle('window:minimize', () => {

@@ -25,7 +25,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { WorkspaceLock, type LockState } from './lockfile';
 
 const isDev = !app.isPackaged;
@@ -86,6 +86,10 @@ function psLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+function cmdLiteral(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 async function downloadReleaseAsset(input: { assetApiUrl?: string; token?: string; fileName?: string }): Promise<string> {
   const assetApiUrl = String(input?.assetApiUrl || '').trim();
   const token = String(input?.token || '').trim();
@@ -108,12 +112,20 @@ async function downloadReleaseAsset(input: { assetApiUrl?: string; token?: strin
   return filePath;
 }
 
-function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { scriptPath: string; logPath: string } {
+function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { scriptPath: string; cmdPath: string; logPath: string } {
   const scriptDir = path.join(app.getPath('temp'), 'PrivacyFlow-updater');
   fs.mkdirSync(scriptDir, { recursive: true });
   const scriptPath = path.join(scriptDir, `Apply-PrivacyFlow-Update-${Date.now()}.ps1`);
+  const cmdPath = path.join(scriptDir, `Start-PrivacyFlow-Update-${Date.now()}.cmd`);
   const backupRoot = path.join(app.getPath('downloads'), 'PrivacyFlow backups');
   const logPath = path.join(app.getPath('downloads'), 'PrivacyFlow-update.log');
+  fs.writeFileSync(
+    logPath,
+    `${new Date().toISOString()} PrivacyFlow prepared updater handoff.\r\n` +
+    `${new Date().toISOString()} Script: ${scriptPath}\r\n` +
+    `${new Date().toISOString()} App folder: ${input.appFolder}\r\n`,
+    'utf8',
+  );
   const lines = [
     '$ErrorActionPreference = "Stop"',
     `$ZipPath = ${psLiteral(input.zipPath)}`,
@@ -161,7 +173,20 @@ function writeUpdaterScript(input: { zipPath: string; appFolder: string }): { sc
     '}',
   ];
   fs.writeFileSync(scriptPath, lines.join('\r\n'), 'utf8');
-  return { scriptPath, logPath };
+  const cmdLines = [
+    '@echo off',
+    'setlocal',
+    `echo %date% %time% Starting PrivacyFlow updater command.>> ${cmdLiteral(logPath)}`,
+    `start "PrivacyFlow Updater" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -File ${cmdLiteral(scriptPath)}`,
+    'if errorlevel 1 (',
+    `  echo %date% %time% ERROR: Could not start PowerShell updater.>> ${cmdLiteral(logPath)}`,
+    `  start notepad.exe ${cmdLiteral(logPath)}`,
+    '  exit /b 1',
+    ')',
+    'exit /b 0',
+  ];
+  fs.writeFileSync(cmdPath, cmdLines.join('\r\n'), 'utf8');
+  return { scriptPath, cmdPath, logPath };
 }
 
 function workspacePreferencePath(): string {
@@ -831,15 +856,13 @@ ipcMain.handle('updater:applyReleaseAsset', async (_e, input: { assetApiUrl?: st
   }
 
   const updater = writeUpdaterScript({ zipPath: filePath, appFolder: info.folderPath });
-  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updater.scriptPath], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-    cwd: app.getPath('temp'),
-  });
-  child.unref();
+  const openError = await shell.openPath(updater.cmdPath);
+  if (openError) {
+    shell.showItemInFolder(updater.cmdPath);
+    throw new Error(`Unable to start the updater handoff: ${openError}. Log: ${updater.logPath}`);
+  }
   writeApplicationFolderPreference(info.folderPath);
-  setTimeout(() => app.quit(), 300);
+  setTimeout(() => app.quit(), 1200);
   return { filePath, appFolder: info.folderPath, updaterScriptPath: updater.scriptPath, mode: 'automatic' as const, message: `Updater log: ${updater.logPath}` };
 });
 

@@ -125,7 +125,10 @@ function isNewerVersion(candidate: string, current: string): boolean {
 
 function preferredReleaseAsset(release: GitHubRelease): GitHubReleaseAsset | null {
   const assets = release.assets ?? [];
-  const preferred = assets.find((asset) => /\.(exe|msi|dmg|pkg|appimage|deb|rpm|zip)$/i.test(asset.name));
+  const preferred =
+    assets.find((asset) => /PrivacyFlow-.*-x64-folder\.zip$/i.test(asset.name)) ??
+    assets.find((asset) => /PrivacyFlow-.*-x64-portable\.exe$/i.test(asset.name)) ??
+    assets.find((asset) => /\.(exe|msi|dmg|pkg|appimage|deb|rpm|zip)$/i.test(asset.name));
   return preferred ?? assets[0] ?? null;
 }
 
@@ -443,14 +446,14 @@ function UpdateSection() {
 
       {state.status === 'available' && (
         <p className="text-[11px] text-muted">
-          The update button downloads the newest package, then opens it from
-          your Downloads folder. Close PrivacyFlow before running the downloaded update.
+          The update button downloads the folder-based Windows ZIP when available, then opens it from
+          your Downloads folder. Close PrivacyFlow, extract the ZIP, and run PrivacyFlow.exe from the extracted folder.
         </p>
       )}
       {state.status === 'downloaded' && (
         <p className="text-[11px] text-muted">
           Downloaded {state.fileName}. If Windows did not open it automatically, open it from your Downloads folder.
-          Close PrivacyFlow before running the update.
+          Close PrivacyFlow, extract the ZIP if needed, and run PrivacyFlow.exe from the updated folder.
         </p>
       )}
     </div>

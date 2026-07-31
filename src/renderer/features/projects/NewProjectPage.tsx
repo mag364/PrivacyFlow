@@ -21,6 +21,7 @@ export function NewProjectPage() {
   const [submitError, setSubmitError] = React.useState('');
   const [existingProjects, setExistingProjects] = React.useState<Project[]>([]);
   const [commentTemplates, setCommentTemplates] = React.useState<NoteTemplate[]>([]);
+  const [orgName, setOrgName] = React.useState('');
   const appliedProjectNumber = React.useRef('');
 
   // Project Information
@@ -50,7 +51,10 @@ export function NewProjectPage() {
   React.useEffect(() => {
     platform().projects.list().then(setExistingProjects).catch(() => setExistingProjects([]));
     platform().system.settings()
-      .then((settings) => setCommentTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'comments')))
+      .then((settings) => {
+        setOrgName(settings.organizationName);
+        setCommentTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'comments'));
+      })
       .catch(() => setCommentTemplates([]));
   }, []);
 
@@ -136,9 +140,21 @@ export function NewProjectPage() {
   }
 
   function insertCommentTemplate(template: NoteTemplate) {
+    const values: Record<string, string> = {
+      '{{project.name}}': projectName,
+      '{{project.number}}': projectNumber,
+      '{{project.status}}': status,
+      '{{project.source}}': source,
+      '{{project.ritmNumber}}': ritmNumber,
+      '{{project.investmentClass}}': investmentClass,
+      '{{project.fiscalYear}}': fiscalYear,
+      '{{project.businessUnit}}': businessUnit,
+      '{{org.name}}': orgName,
+    };
+    const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
     setComments((current) => {
       const trimmed = current.trimEnd();
-      return `${trimmed}${trimmed ? '\n\n' : ''}${template.body}`;
+      return `${trimmed}${trimmed ? '\n\n' : ''}${body}`;
     });
   }
 

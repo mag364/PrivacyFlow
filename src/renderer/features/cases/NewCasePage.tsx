@@ -18,6 +18,7 @@ export function NewCasePage() {
   const [busy, setBusy] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [requestIdPrefix, setRequestIdPrefix] = React.useState('');
+  const [orgName, setOrgName] = React.useState('');
 
   const [requestId, setRequestId] = React.useState('');
   const [dsrreqNumber, setDsrreqNumber] = React.useState('');
@@ -43,6 +44,7 @@ export function NewCasePage() {
   React.useEffect(() => {
     platform().system.settings().then((settings) => {
       setRequestIdPrefix(settings.caseNumberPrefix);
+      setOrgName(settings.organizationName);
       setDescriptionTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'description'));
     });
   }, []);
@@ -131,9 +133,20 @@ export function NewCasePage() {
   }
 
   function insertDescriptionTemplate(template: NoteTemplate) {
+    const values: Record<string, string> = {
+      '{{requester.lastName}}': lastName,
+      '{{requester.email}}': email,
+      '{{case.number}}': dsrreqNumber,
+      '{{case.types}}': requestTypes.join(', '),
+      '{{case.status}}': 'New',
+      '{{case.receivedDate}}': dateDppReceived || dateCsReceived || new Date().toISOString().slice(0, 10),
+      '{{org.name}}': orgName,
+      '{{rule.department}}': '',
+    };
+    const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
     setDescription((current) => {
       const trimmed = current.trimEnd();
-      return `${trimmed}${trimmed ? '\n\n' : ''}${template.body}`;
+      return `${trimmed}${trimmed ? '\n\n' : ''}${body}`;
     });
   }
 

@@ -21,6 +21,14 @@ const PLACEHOLDERS = [
   '{{case.receivedDate}}', '{{org.name}}', '{{rule.department}}',
 ];
 
+const REQUEST_NOTE_PLACEHOLDERS = PLACEHOLDERS;
+
+const PROJECT_NOTE_PLACEHOLDERS = [
+  '{{project.name}}', '{{project.number}}', '{{project.status}}', '{{project.source}}',
+  '{{project.ritmNumber}}', '{{project.investmentClass}}', '{{project.fiscalYear}}',
+  '{{project.businessUnit}}', '{{org.name}}',
+];
+
 const UPDATE_FIELD_OPTIONS = [
   ['', 'Any changed field'],
   ['requestTypes', 'Request types'],
@@ -163,6 +171,9 @@ export function AutomationPage() {
     return conditions.length ? `Only when ${conditions.join(' and ')}` : 'Applies to all requests';
   };
   const recipientNames = settings.automationRecipients.map((recipient) => recipient.name).filter(Boolean);
+  const notePlaceholders = editingNoteTemplate?.target === 'comments'
+    ? PROJECT_NOTE_PLACEHOLDERS
+    : REQUEST_NOTE_PLACEHOLDERS;
 
   return (
     <div>
@@ -602,6 +613,21 @@ export function AutomationPage() {
                   placeholder="Enter reusable note text..."
                 />
               </Field>
+              <div className="flex flex-wrap gap-1">
+                {notePlaceholders.map((placeholder) => (
+                  <button
+                    key={placeholder}
+                    type="button"
+                    onClick={() => setEditingNoteTemplate({
+                      ...editingNoteTemplate,
+                      body: `${editingNoteTemplate.body}${editingNoteTemplate.body ? ' ' : ''}${placeholder}`,
+                    })}
+                    className="rounded-capsule border border-line px-2 py-1 text-[11px] text-muted hover:text-ink focus-ring"
+                  >
+                    {placeholder}
+                  </button>
+                ))}
+              </div>
               <div className="flex justify-end gap-2">
                 <GlassButton onClick={() => setEditingNoteTemplate(null)}>Cancel</GlassButton>
                 <GlassButton

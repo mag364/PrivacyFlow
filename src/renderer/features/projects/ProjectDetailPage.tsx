@@ -6,7 +6,7 @@ import {
   Pencil, Check, X, Save,
 } from 'lucide-react';
 import { platform } from '../../platform';
-import type { Project, AuditEvent, Communication } from '@shared/types';
+import type { Project, AuditEvent, Communication, NoteTemplate } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
 import {
   GlassPanel, GlassBadge, GlassButton, GlassInput, GlassSelect, GlassTextarea,
@@ -43,6 +43,8 @@ export function ProjectDetailPage() {
   const [draft, setDraft] = React.useState<Project | null>(null);
   const [saveBusy, setSaveBusy] = React.useState(false);
   const [saveError, setSaveError] = React.useState('');
+  const [commentTemplates, setCommentTemplates] = React.useState<NoteTemplate[]>([]);
+  const [orgName, setOrgName] = React.useState('');
 
   // Workflow status change
   const [statusReason, setStatusReason] = React.useState('');
@@ -74,6 +76,14 @@ export function ProjectDetailPage() {
   }, [id]);
 
   React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    platform().system.settings()
+      .then((settings) => {
+        setOrgName(settings.organizationName);
+        setCommentTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'comments'));
+      })
+      .catch(() => setCommentTemplates([]));
+  }, []);
 
   if (project === undefined) return <Spinner label="Loading project…" />;
   if (project === null) {
@@ -186,6 +196,29 @@ export function ProjectDetailPage() {
   }
 
   const setD = (patch: Partial<Project>) => setDraft((d) => (d ? { ...d, ...patch } : d));
+
+  function insertCommentTemplate(template: NoteTemplate) {
+    setDraft((current) => {
+      if (!current) return current;
+      const values: Record<string, string> = {
+        '{{project.name}}': current.projectName,
+        '{{project.number}}': current.projectNumber,
+        '{{project.status}}': current.status,
+        '{{project.source}}': current.source,
+        '{{project.ritmNumber}}': current.ritmNumber ?? '',
+        '{{project.investmentClass}}': current.investmentClass,
+        '{{project.fiscalYear}}': current.fiscalYear ?? '',
+        '{{project.businessUnit}}': current.businessUnit ?? '',
+        '{{org.name}}': orgName,
+      };
+      const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
+      const trimmed = (current.comments ?? '').trimEnd();
+      return {
+        ...current,
+        comments: `${trimmed}${trimmed ? '\n\n' : ''}${body}`,
+      };
+    });
+  }
 
   return (
     <div>
@@ -414,6 +447,20 @@ export function ProjectDetailPage() {
                       <Field label="Comments">
                         <GlassTextarea rows={3} value={draft.comments ?? ''} onChange={(e) => setD({ comments: e.target.value || undefined })} />
                       </Field>
+                      {commentTemplates.length > 0 && (
+                        <div className="-mt-1 flex flex-wrap gap-2">
+                          {commentTemplates.map((template) => (
+                            <button
+                              key={template.id}
+                              type="button"
+                              onClick={() => insertCommentTemplate(template)}
+                              className="rounded-capsule border border-line px-2.5 py-1 text-xs text-muted hover:text-ink focus-ring"
+                            >
+                              Insert {template.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </GlassPanel>
                 </>

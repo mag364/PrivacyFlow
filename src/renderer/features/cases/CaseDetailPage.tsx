@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type {
-  DsrCase, CaseNote, Communication, CaseDocument, AuditEvent, SourceEmail,
+  DsrCase, CaseNote, Communication, CaseDocument, AuditEvent, SourceEmail, NoteTemplate,
 } from '@shared/types';
 import {
   CASE_STATUSES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES,
@@ -85,6 +85,8 @@ export function CaseDetailPage() {
   const [draft, setDraft] = React.useState<EditDraft | null>(null);
   const [saveBusy, setSaveBusy] = React.useState(false);
   const [saveError, setSaveError] = React.useState('');
+  const [descriptionTemplates, setDescriptionTemplates] = React.useState<NoteTemplate[]>([]);
+  const [orgName, setOrgName] = React.useState('');
 
   // Request ID editing
   const [editingNumber, setEditingNumber] = React.useState(false);
@@ -122,6 +124,14 @@ export function CaseDetailPage() {
   }, [id]);
 
   React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    platform().system.settings()
+      .then((settings) => {
+        setOrgName(settings.organizationName);
+        setDescriptionTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'description'));
+      })
+      .catch(() => setDescriptionTemplates([]));
+  }, []);
   React.useEffect(() => { setCommPage(0); }, [id]);
   React.useEffect(() => { setAuditPage(0); }, [id]);
   React.useEffect(() => {
@@ -336,6 +346,28 @@ export function CaseDetailPage() {
 
   const setD = (patch: Partial<EditDraft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
 
+  function insertDescriptionTemplate(template: NoteTemplate) {
+    setDraft((current) => {
+      if (!current) return current;
+      const values: Record<string, string> = {
+        '{{requester.lastName}}': current.lastName,
+        '{{requester.email}}': current.email,
+        '{{case.number}}': current.dsrreqNumber,
+        '{{case.types}}': current.requestTypes.join(', '),
+        '{{case.status}}': current.closedDate ? 'Closed' : c.status,
+        '{{case.receivedDate}}': current.dateDppReceivedEmail || current.dateClientServiceReceivedEmail || c.createdAt.slice(0, 10),
+        '{{org.name}}': orgName,
+        '{{rule.department}}': '',
+      };
+      const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
+      const trimmed = current.description.trimEnd();
+      return {
+        ...current,
+        description: `${trimmed}${trimmed ? '\n\n' : ''}${body}`,
+      };
+    });
+  }
+
   function toggleDraftType(t: string) {
     setDraft((d) => {
       if (!d) return d;
@@ -500,6 +532,20 @@ export function CaseDetailPage() {
                       <Field label="Request description">
                         <GlassTextarea rows={4} value={draft.description} onChange={(e) => setD({ description: e.target.value })} />
                       </Field>
+                      {descriptionTemplates.length > 0 && (
+                        <div className="-mt-1 flex flex-wrap gap-2">
+                          {descriptionTemplates.map((template) => (
+                            <button
+                              key={template.id}
+                              type="button"
+                              onClick={() => insertDescriptionTemplate(template)}
+                              className="rounded-capsule border border-line px-2.5 py-1 text-xs text-muted hover:text-ink focus-ring"
+                            >
+                              Insert {template.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </GlassPanel>
 

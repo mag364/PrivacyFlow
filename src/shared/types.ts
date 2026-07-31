@@ -296,6 +296,13 @@ export interface AutomationRule {
   enabled: boolean;
 }
 
+export interface NoteTemplate {
+  id: string;
+  name: string;
+  target: 'comments' | 'description';
+  body: string;
+}
+
 // ---- Microsoft 365 / Outlook integration (Settings tab) ---------------------
 
 export interface M365Integration {
@@ -332,6 +339,7 @@ export interface OrgSettings {
   emailTemplates: EmailTemplate[];
   automationRules: AutomationRule[];
   automationRecipients: AutomationRecipient[];
+  noteTemplates: NoteTemplate[];
   // ---- Integrations ----
   m365: M365Integration;
 }

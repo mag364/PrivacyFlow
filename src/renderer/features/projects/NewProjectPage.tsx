@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { platform } from '../../platform';
 import type { NewProjectInput } from '../../platform/types';
-import type { Project } from '@shared/types';
+import type { NoteTemplate, Project } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
@@ -20,6 +20,7 @@ export function NewProjectPage() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [submitError, setSubmitError] = React.useState('');
   const [existingProjects, setExistingProjects] = React.useState<Project[]>([]);
+  const [commentTemplates, setCommentTemplates] = React.useState<NoteTemplate[]>([]);
   const appliedProjectNumber = React.useRef('');
 
   // Project Information
@@ -48,6 +49,9 @@ export function NewProjectPage() {
 
   React.useEffect(() => {
     platform().projects.list().then(setExistingProjects).catch(() => setExistingProjects([]));
+    platform().system.settings()
+      .then((settings) => setCommentTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'comments')))
+      .catch(() => setCommentTemplates([]));
   }, []);
 
   const matchedProject = React.useMemo(() => {
@@ -129,6 +133,13 @@ export function NewProjectPage() {
       setBusy(false);
       setSubmitError(e instanceof Error ? e.message : 'Unable to create the project.');
     }
+  }
+
+  function insertCommentTemplate(template: NoteTemplate) {
+    setComments((current) => {
+      const trimmed = current.trimEnd();
+      return `${trimmed}${trimmed ? '\n\n' : ''}${template.body}`;
+    });
   }
 
   return (
@@ -253,6 +264,22 @@ export function NewProjectPage() {
           <Field label="Comments">
             <GlassTextarea rows={4} value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Additional comments…" />
           </Field>
+          {commentTemplates.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Insert</span>
+              {commentTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => insertCommentTemplate(template)}
+                  className="rounded-capsule border border-line px-2.5 py-1 text-[11px] text-muted hover:text-ink focus-ring"
+                  title={`Insert ${template.name}`}
+                >
+                  {template.name}
+                </button>
+              ))}
+            </div>
+          )}
           {submitError && <p className="mt-3 text-xs text-red-400">{submitError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <GlassButton type="button" onClick={() => navigate('/')}>Cancel</GlassButton>

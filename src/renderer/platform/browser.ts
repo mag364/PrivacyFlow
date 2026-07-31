@@ -2,7 +2,7 @@ import { addDays, isSameMonth, parseISO } from 'date-fns';
 import type {
   DsrCase, AuditEvent, IntegrityReport, OrgSettings, CaseNote, SlaInfo, Project, SlaRule,
   EmailTemplate, AutomationRule, AutomationTrigger, AutomationRecipient, User, CaseDocument, Communication,
-  SourceEmail,
+  SourceEmail, NoteTemplate,
 } from '@shared/types';
 import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
@@ -110,6 +110,10 @@ function defaultAutomationRules(): AutomationRule[] {
   ];
 }
 
+function defaultNoteTemplates(): NoteTemplate[] {
+  return [];
+}
+
 function defaultSettings(): OrgSettings {
   return {
     organizationName: APP_CONFIG.defaults.organizationName,
@@ -129,6 +133,7 @@ function defaultSettings(): OrgSettings {
     emailTemplates: defaultEmailTemplates(),
     automationRules: defaultAutomationRules(),
     automationRecipients: defaultAutomationRecipients(),
+    noteTemplates: defaultNoteTemplates(),
     m365: { connected: false, mode: 'simulated' },
   };
 }
@@ -651,6 +656,7 @@ function load(): Db | null {
     if (!Array.isArray(s.emailTemplates)) s.emailTemplates = d.emailTemplates;
     if (!Array.isArray(s.automationRules)) s.automationRules = d.automationRules;
     if (!Array.isArray(s.automationRecipients)) s.automationRecipients = d.automationRecipients;
+    if (!Array.isArray(s.noteTemplates)) s.noteTemplates = d.noteTemplates;
     if (!s.m365 || typeof s.m365.connected !== 'boolean') s.m365 = d.m365;
     const workflowMigrated = migrateWorkflow(cache);
     const templateMigrated = migrateRequesterFirstNameTemplates(cache);

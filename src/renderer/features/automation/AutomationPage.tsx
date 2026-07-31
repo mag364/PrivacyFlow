@@ -1,9 +1,10 @@
 import React from 'react';
 import {
   Mail, Zap, Save, Check, Plus, Trash2, Pencil, Users, ChevronDown, ChevronRight,
+  FileText,
 } from 'lucide-react';
 import { platform } from '../../platform';
-import type { OrgSettings, EmailTemplate, AutomationRule, AutomationRecipient } from '@shared/types';
+import type { OrgSettings, EmailTemplate, AutomationRule, AutomationRecipient, NoteTemplate } from '@shared/types';
 import { CASE_STATUSES, INTAKE_CHANNELS, REQUEST_TYPES } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import {
@@ -39,7 +40,7 @@ const UPDATE_FIELD_OPTIONS = [
   ['sla.closureDate', 'Closed'],
 ] as const;
 
-type Tab = 'emails' | 'rules' | 'recipients';
+type Tab = 'emails' | 'rules' | 'recipients' | 'notes';
 
 export function AutomationPage() {
   const { user } = useAuth();
@@ -47,6 +48,7 @@ export function AutomationPage() {
   const [saved, setSaved] = React.useState(false);
   const [tab, setTab] = React.useState<Tab>('emails');
   const [editingTemplate, setEditingTemplate] = React.useState<EmailTemplate | null>(null);
+  const [editingNoteTemplate, setEditingNoteTemplate] = React.useState<NoteTemplate | null>(null);
   const [expandedRules, setExpandedRules] = React.useState<string[]>([]);
 
   React.useEffect(() => {
@@ -73,6 +75,17 @@ export function AutomationPage() {
       emailTemplates: settings!.emailTemplates.filter((t) => t.id !== id),
       automationRules: settings!.automationRules.filter((r) => r.templateId !== id),
     });
+  }
+
+  function saveNoteTemplate(t: NoteTemplate) {
+    const list = settings!.noteTemplates ?? [];
+    const exists = list.some((x) => x.id === t.id);
+    patch({ noteTemplates: exists ? list.map((x) => (x.id === t.id ? t : x)) : [...list, t] });
+    setEditingNoteTemplate(null);
+  }
+
+  function deleteNoteTemplate(id: string) {
+    patch({ noteTemplates: (settings!.noteTemplates ?? []).filter((t) => t.id !== id) });
   }
 
   function updateAutomationRule(id: string, p: Partial<AutomationRule>) {
@@ -127,6 +140,7 @@ export function AutomationPage() {
       emailTemplates: settings!.emailTemplates,
       automationRules: settings!.automationRules,
       automationRecipients: settings!.automationRecipients,
+      noteTemplates: settings!.noteTemplates ?? [],
     });
     setSettings(s);
     setSaved(true);
@@ -176,6 +190,7 @@ export function AutomationPage() {
           ['emails', 'Email automation', Mail],
           ['rules', 'Rules', Zap],
           ['recipients', 'Recipients', Users],
+          ['notes', 'Notes', FileText],
         ] as const).map(([key, label, Icon]) => (
           <button
             key={key}
@@ -505,6 +520,100 @@ export function AutomationPage() {
               </tbody>
             </table>
           </div>
+        </GlassPanel>
+      )}
+
+      {tab === 'notes' && (
+        <GlassPanel>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-accent" />
+              <h3 className="text-sm font-semibold text-ink">Note templates</h3>
+            </div>
+            {editable && (
+              <GlassButton
+                variant="ghost"
+                className="px-2 py-1 text-xs"
+                onClick={() => setEditingNoteTemplate({ id: uid(), name: '', target: 'description', body: '' })}
+              >
+                <Plus className="h-3.5 w-3.5" /> New note template
+              </GlassButton>
+            )}
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Note templates appear as insert options below the New Request description or New Project comments field based on the selected target.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            {(settings.noteTemplates ?? []).map((t) => (
+              <div key={t.id} className="rounded-xl border border-line px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 text-sm font-medium text-ink">{t.name}</p>
+                  <GlassBadge tone={t.target === 'description' ? 'info' : 'success'}>
+                    {t.target === 'description' ? 'Description' : 'Comments'}
+                  </GlassBadge>
+                  {editable && (
+                    <>
+                      <button onClick={() => setEditingNoteTemplate({ ...t })} className="rounded-lg p-1.5 text-muted hover:text-ink focus-ring" title="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => deleteNoteTemplate(t.id)} className="rounded-lg p-1.5 text-muted hover:text-red-400 focus-ring" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted">{t.body}</p>
+              </div>
+            ))}
+            {(settings.noteTemplates ?? []).length === 0 && (
+              <p className="py-6 text-center text-sm text-muted">No note templates yet. Create one to add inserts to request descriptions or project comments.</p>
+            )}
+          </div>
+
+          {editingNoteTemplate && (
+            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-accent/40 bg-[var(--pf-surface)] p-4">
+              <p className="text-sm font-semibold text-ink">
+                {(settings.noteTemplates ?? []).some((t) => t.id === editingNoteTemplate.id) ? 'Edit note template' : 'New note template'}
+              </p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Template name">
+                  <GlassInput
+                    value={editingNoteTemplate.name}
+                    onChange={(e) => setEditingNoteTemplate({ ...editingNoteTemplate, name: e.target.value })}
+                    placeholder="e.g. Standard intake note"
+                  />
+                </Field>
+                <Field label="Show on">
+                  <GlassSelect
+                    value={editingNoteTemplate.target}
+                    onChange={(e) => setEditingNoteTemplate({ ...editingNoteTemplate, target: e.target.value as NoteTemplate['target'] })}
+                  >
+                    <option value="description">New request description</option>
+                    <option value="comments">New project comments</option>
+                  </GlassSelect>
+                </Field>
+              </div>
+              <Field label="Template text">
+                <GlassTextarea
+                  rows={6}
+                  value={editingNoteTemplate.body}
+                  onChange={(e) => setEditingNoteTemplate({ ...editingNoteTemplate, body: e.target.value })}
+                  placeholder="Enter reusable note text..."
+                />
+              </Field>
+              <div className="flex justify-end gap-2">
+                <GlassButton onClick={() => setEditingNoteTemplate(null)}>Cancel</GlassButton>
+                <GlassButton
+                  variant="primary"
+                  onClick={() => saveNoteTemplate(editingNoteTemplate)}
+                  disabled={!editingNoteTemplate.name.trim() || !editingNoteTemplate.body.trim()}
+                >
+                  Save note template
+                </GlassButton>
+              </div>
+            </div>
+          )}
         </GlassPanel>
       )}
 

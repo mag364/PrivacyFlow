@@ -6,7 +6,7 @@ import {
   REQUEST_TYPES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES, RELATIONSHIP_TYPES,
 } from '@shared/constants';
 import type { NewCaseInput } from '../../platform/types';
-import type { SourceEmail } from '@shared/types';
+import type { NoteTemplate, SourceEmail } from '@shared/types';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
@@ -36,11 +36,15 @@ export function NewCasePage() {
   const [standardResponseSent, setStandardResponseSent] = React.useState('');
   const [forwardedToRon, setForwardedToRon] = React.useState('');
   const [description, setDescription] = React.useState('');
+  const [descriptionTemplates, setDescriptionTemplates] = React.useState<NoteTemplate[]>([]);
   const [sourceEmail, setSourceEmail] = React.useState<SourceEmail | null>(null);
   const [sourceEmailError, setSourceEmailError] = React.useState('');
 
   React.useEffect(() => {
-    platform().system.settings().then((settings) => setRequestIdPrefix(settings.caseNumberPrefix));
+    platform().system.settings().then((settings) => {
+      setRequestIdPrefix(settings.caseNumberPrefix);
+      setDescriptionTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'description'));
+    });
   }, []);
 
   if (!can(user?.role, 'requests.create')) {
@@ -124,6 +128,13 @@ export function NewCasePage() {
     const created = await platform().cases.create(input);
     setBusy(false);
     navigate(`/cases/${created.id}`);
+  }
+
+  function insertDescriptionTemplate(template: NoteTemplate) {
+    setDescription((current) => {
+      const trimmed = current.trimEnd();
+      return `${trimmed}${trimmed ? '\n\n' : ''}${template.body}`;
+    });
   }
 
   return (
@@ -254,6 +265,22 @@ export function NewCasePage() {
           <Field label="Description" error={errors.description}>
             <GlassTextarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Summarise what the requester is asking for…" />
           </Field>
+          {descriptionTemplates.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Insert</span>
+              {descriptionTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => insertDescriptionTemplate(template)}
+                  className="rounded-capsule border border-line px-2.5 py-1 text-[11px] text-muted hover:text-ink focus-ring"
+                  title={`Insert ${template.name}`}
+                >
+                  {template.name}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="mt-4 flex justify-end gap-2">
             <GlassButton type="button" onClick={() => navigate('/cases')}>Cancel</GlassButton>
             <GlassButton type="submit" variant="primary" loading={busy}>Create request</GlassButton>

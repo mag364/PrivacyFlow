@@ -12,6 +12,7 @@ import {
   GlassPanel, GlassButton, GlassBadge, GlassInput, GlassSelect, GlassTextarea, Field, Spinner,
 } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
+import { insertTextAtCursor } from '../../lib/textInsert';
 
 const uid = () =>
   (globalThis.crypto?.randomUUID?.() ?? `id-${Math.random().toString(36).slice(2)}-${Date.now()}`);
@@ -45,6 +46,8 @@ export function AutomationPage() {
   const [editingTemplate, setEditingTemplate] = React.useState<EmailTemplate | null>(null);
   const [editingNoteTemplate, setEditingNoteTemplate] = React.useState<NoteTemplate | null>(null);
   const [expandedRules, setExpandedRules] = React.useState<string[]>([]);
+  const templateBodyRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const noteBodyRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   React.useEffect(() => {
     platform().system.settings().then(setSettings);
@@ -290,14 +293,22 @@ export function AutomationPage() {
                 <GlassInput value={editingTemplate.subject} onChange={(e) => setEditingTemplate({ ...editingTemplate, subject: e.target.value })} />
               </Field>
               <Field label="Body">
-                <GlassTextarea rows={7} value={editingTemplate.body} onChange={(e) => setEditingTemplate({ ...editingTemplate, body: e.target.value })} />
+                <GlassTextarea
+                  ref={templateBodyRef}
+                  rows={7}
+                  value={editingTemplate.body}
+                  onChange={(e) => setEditingTemplate({ ...editingTemplate, body: e.target.value })}
+                />
               </Field>
               <div className="flex flex-wrap gap-1">
                 {REQUEST_PLACEHOLDERS.map((p) => (
                   <button
                     key={p.key}
                     type="button"
-                    onClick={() => setEditingTemplate({ ...editingTemplate, body: `${editingTemplate.body}${editingTemplate.body ? ' ' : ''}${p.token}` })}
+                    onClick={() => setEditingTemplate({
+                      ...editingTemplate,
+                      body: insertTextAtCursor(templateBodyRef.current, editingTemplate.body, p.token),
+                    })}
                     className="rounded-capsule border border-line px-2 py-1 text-[11px] text-muted hover:text-ink focus-ring"
                     title={p.label}
                   >
@@ -596,6 +607,7 @@ export function AutomationPage() {
               </div>
               <Field label="Template text">
                 <GlassTextarea
+                  ref={noteBodyRef}
                   rows={6}
                   value={editingNoteTemplate.body}
                   onChange={(e) => setEditingNoteTemplate({ ...editingNoteTemplate, body: e.target.value })}
@@ -609,7 +621,7 @@ export function AutomationPage() {
                     type="button"
                     onClick={() => setEditingNoteTemplate({
                       ...editingNoteTemplate,
-                      body: `${editingNoteTemplate.body}${editingNoteTemplate.body ? ' ' : ''}${placeholder.token}`,
+                      body: insertTextAtCursor(noteBodyRef.current, editingNoteTemplate.body, placeholder.token),
                     })}
                     className="rounded-capsule border border-line px-2 py-1 text-[11px] text-muted hover:text-ink focus-ring"
                     title={placeholder.label}

@@ -9,6 +9,7 @@ import { boolText, replacePlaceholders } from '@shared/placeholders';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
+import { insertTextAtCursor } from '../../lib/textInsert';
 
 const SOURCES = ['DD', 'SSDS', 'Lighthouse'];
 const INVESTMENT_CLASSES = ['CTB', 'KTLO', 'RTB', 'Not Listed'];
@@ -48,6 +49,7 @@ export function NewProjectPage() {
   const [assetsMentioned, setAssetsMentioned] = React.useState('');
 
   const [comments, setComments] = React.useState('');
+  const commentsRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   React.useEffect(() => {
     platform().projects.list().then(setExistingProjects).catch(() => setExistingProjects([]));
@@ -167,8 +169,7 @@ export function NewProjectPage() {
     };
     const body = replacePlaceholders(template.body, values);
     setComments((current) => {
-      const trimmed = current.trimEnd();
-      return `${trimmed}${trimmed ? '\n\n' : ''}${body}`;
+      return insertTextAtCursor(commentsRef.current, current, body);
     });
   }
 
@@ -292,7 +293,13 @@ export function NewProjectPage() {
 
         <GlassPanel className="lg:col-span-2">
           <Field label="Comments">
-            <GlassTextarea rows={4} value={comments} onChange={(e) => setComments(e.target.value)} placeholder="Additional comments…" />
+            <GlassTextarea
+              ref={commentsRef}
+              rows={4}
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder="Additional comments…"
+            />
           </Field>
           {commentTemplates.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-2">

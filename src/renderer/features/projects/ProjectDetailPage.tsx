@@ -15,6 +15,7 @@ import {
 } from '../../components/glass';
 import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { useAuth, can } from '../../store/auth';
+import { insertTextAtCursor } from '../../lib/textInsert';
 
 type TabKey = 'overview' | 'communications' | 'comments' | 'audit';
 
@@ -46,6 +47,7 @@ export function ProjectDetailPage() {
   const [saveError, setSaveError] = React.useState('');
   const [commentTemplates, setCommentTemplates] = React.useState<NoteTemplate[]>([]);
   const [orgName, setOrgName] = React.useState('');
+  const commentsRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   // Workflow status change
   const [statusReason, setStatusReason] = React.useState('');
@@ -202,10 +204,9 @@ export function ProjectDetailPage() {
     setDraft((current) => {
       if (!current) return current;
       const body = replacePlaceholders(template.body, projectPlaceholderValues(current, orgName));
-      const trimmed = (current.comments ?? '').trimEnd();
       return {
         ...current,
-        comments: `${trimmed}${trimmed ? '\n\n' : ''}${body}`,
+        comments: insertTextAtCursor(commentsRef.current, current.comments ?? '', body),
       };
     });
   }
@@ -435,7 +436,12 @@ export function ProjectDetailPage() {
                         <GlassInput value={draft.assetsMentioned ?? ''} onChange={(e) => setD({ assetsMentioned: e.target.value || undefined })} />
                       </Field>
                       <Field label="Comments">
-                        <GlassTextarea rows={3} value={draft.comments ?? ''} onChange={(e) => setD({ comments: e.target.value || undefined })} />
+                        <GlassTextarea
+                          ref={commentsRef}
+                          rows={3}
+                          value={draft.comments ?? ''}
+                          onChange={(e) => setD({ comments: e.target.value || undefined })}
+                        />
                       </Field>
                       {commentTemplates.length > 0 && (
                         <div className="-mt-1 flex flex-wrap gap-2">

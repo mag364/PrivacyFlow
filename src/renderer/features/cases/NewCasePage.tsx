@@ -12,6 +12,7 @@ import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
 import { isSupportedSourceEmailFile, sourceEmailFromFile } from '../../lib/emailSource';
+import { insertTextAtCursor } from '../../lib/textInsert';
 
 export function NewCasePage() {
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ export function NewCasePage() {
   const [descriptionTemplates, setDescriptionTemplates] = React.useState<NoteTemplate[]>([]);
   const [sourceEmail, setSourceEmail] = React.useState<SourceEmail | null>(null);
   const [sourceEmailError, setSourceEmailError] = React.useState('');
+  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   React.useEffect(() => {
     platform().system.settings().then((settings) => {
@@ -172,8 +174,7 @@ export function NewCasePage() {
     };
     const body = replacePlaceholders(template.body, values);
     setDescription((current) => {
-      const trimmed = current.trimEnd();
-      return `${trimmed}${trimmed ? '\n\n' : ''}${body}`;
+      return insertTextAtCursor(descriptionRef.current, current, body);
     });
   }
 
@@ -303,7 +304,13 @@ export function NewCasePage() {
 
         <GlassPanel className="lg:col-span-2">
           <Field label="Description" error={errors.description}>
-            <GlassTextarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Summarise what the requester is asking for…" />
+            <GlassTextarea
+              ref={descriptionRef}
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Summarise what the requester is asking for…"
+            />
           </Field>
           {descriptionTemplates.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-2">

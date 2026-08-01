@@ -22,6 +22,7 @@ import {
 import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { useAuth, can } from '../../store/auth';
 import { isSupportedSourceEmailFile, sourceEmailFromFile, sourceEmailSummary } from '../../lib/emailSource';
+import { insertTextAtCursor } from '../../lib/textInsert';
 
 type TabKey = 'overview' | 'documents' | 'communications' | 'notes' | 'audit';
 
@@ -88,6 +89,7 @@ export function CaseDetailPage() {
   const [saveError, setSaveError] = React.useState('');
   const [descriptionTemplates, setDescriptionTemplates] = React.useState<NoteTemplate[]>([]);
   const [orgName, setOrgName] = React.useState('');
+  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   // Request ID editing
   const [editingNumber, setEditingNumber] = React.useState(false);
@@ -387,10 +389,9 @@ export function CaseDetailPage() {
         'rule.department': '',
       };
       const body = replacePlaceholders(template.body, values);
-      const trimmed = current.description.trimEnd();
       return {
         ...current,
-        description: `${trimmed}${trimmed ? '\n\n' : ''}${body}`,
+        description: insertTextAtCursor(descriptionRef.current, current.description, body),
       };
     });
   }
@@ -557,7 +558,12 @@ export function CaseDetailPage() {
                         </Field>
                       </div>
                       <Field label="Request description">
-                        <GlassTextarea rows={4} value={draft.description} onChange={(e) => setD({ description: e.target.value })} />
+                        <GlassTextarea
+                          ref={descriptionRef}
+                          rows={4}
+                          value={draft.description}
+                          onChange={(e) => setD({ description: e.target.value })}
+                        />
                       </Field>
                       {descriptionTemplates.length > 0 && (
                         <div className="-mt-1 flex flex-wrap gap-2">

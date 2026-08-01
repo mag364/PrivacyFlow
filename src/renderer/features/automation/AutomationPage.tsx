@@ -6,6 +6,7 @@ import {
 import { platform } from '../../platform';
 import type { OrgSettings, EmailTemplate, AutomationRule, AutomationRecipient, NoteTemplate } from '@shared/types';
 import { CASE_STATUSES, INTAKE_CHANNELS, REQUEST_TYPES } from '@shared/constants';
+import { PROJECT_PLACEHOLDERS, REQUEST_PLACEHOLDERS } from '@shared/placeholders';
 import { PageHeader } from '../../layouts/AppShell';
 import {
   GlassPanel, GlassButton, GlassBadge, GlassInput, GlassSelect, GlassTextarea, Field, Spinner,
@@ -14,20 +15,6 @@ import { useAuth, can } from '../../store/auth';
 
 const uid = () =>
   (globalThis.crypto?.randomUUID?.() ?? `id-${Math.random().toString(36).slice(2)}-${Date.now()}`);
-
-const PLACEHOLDERS = [
-  '{{requester.lastName}}', '{{requester.email}}',
-  '{{case.number}}', '{{case.types}}', '{{case.status}}',
-  '{{case.receivedDate}}', '{{org.name}}', '{{rule.department}}',
-];
-
-const REQUEST_NOTE_PLACEHOLDERS = PLACEHOLDERS;
-
-const PROJECT_NOTE_PLACEHOLDERS = [
-  '{{project.name}}', '{{project.number}}', '{{project.status}}', '{{project.source}}',
-  '{{project.ritmNumber}}', '{{project.investmentClass}}', '{{project.fiscalYear}}',
-  '{{project.businessUnit}}', '{{org.name}}',
-];
 
 const UPDATE_FIELD_OPTIONS = [
   ['', 'Any changed field'],
@@ -172,8 +159,8 @@ export function AutomationPage() {
   };
   const recipientNames = settings.automationRecipients.map((recipient) => recipient.name).filter(Boolean);
   const notePlaceholders = editingNoteTemplate?.target === 'comments'
-    ? PROJECT_NOTE_PLACEHOLDERS
-    : REQUEST_NOTE_PLACEHOLDERS;
+    ? PROJECT_PLACEHOLDERS
+    : REQUEST_PLACEHOLDERS;
 
   return (
     <div>
@@ -238,7 +225,8 @@ export function AutomationPage() {
             )}
           </div>
           <p className="mb-3 text-xs text-muted">
-            Templates support placeholders like <code className="text-accent">{'{{case.number}}'}</code> and{' '}
+            Templates support placeholders like <code className="text-accent">{'{{case.requestId}}'}</code>,{' '}
+            <code className="text-accent">{'{{case.number}}'}</code>, and{' '}
             <code className="text-accent">{'{{requester.lastName}}'}</code>, replaced when the email sends.
           </p>
 
@@ -305,14 +293,15 @@ export function AutomationPage() {
                 <GlassTextarea rows={7} value={editingTemplate.body} onChange={(e) => setEditingTemplate({ ...editingTemplate, body: e.target.value })} />
               </Field>
               <div className="flex flex-wrap gap-1">
-                {PLACEHOLDERS.map((p) => (
+                {REQUEST_PLACEHOLDERS.map((p) => (
                   <button
-                    key={p}
+                    key={p.key}
                     type="button"
-                    onClick={() => setEditingTemplate({ ...editingTemplate, body: `${editingTemplate.body}${editingTemplate.body ? ' ' : ''}${p}` })}
+                    onClick={() => setEditingTemplate({ ...editingTemplate, body: `${editingTemplate.body}${editingTemplate.body ? ' ' : ''}${p.token}` })}
                     className="rounded-capsule border border-line px-2 py-1 text-[11px] text-muted hover:text-ink focus-ring"
+                    title={p.label}
                   >
-                    {p}
+                    {p.token}
                   </button>
                 ))}
               </div>
@@ -616,15 +605,16 @@ export function AutomationPage() {
               <div className="flex flex-wrap gap-1">
                 {notePlaceholders.map((placeholder) => (
                   <button
-                    key={placeholder}
+                    key={placeholder.key}
                     type="button"
                     onClick={() => setEditingNoteTemplate({
                       ...editingNoteTemplate,
-                      body: `${editingNoteTemplate.body}${editingNoteTemplate.body ? ' ' : ''}${placeholder}`,
+                      body: `${editingNoteTemplate.body}${editingNoteTemplate.body ? ' ' : ''}${placeholder.token}`,
                     })}
                     className="rounded-capsule border border-line px-2 py-1 text-[11px] text-muted hover:text-ink focus-ring"
+                    title={placeholder.label}
                   >
-                    {placeholder}
+                    {placeholder.token}
                   </button>
                 ))}
               </div>

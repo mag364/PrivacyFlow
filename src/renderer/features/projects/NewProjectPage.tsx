@@ -5,6 +5,7 @@ import { platform } from '../../platform';
 import type { NewProjectInput } from '../../platform/types';
 import type { NoteTemplate, Project } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
+import { boolText, replacePlaceholders } from '@shared/placeholders';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
@@ -141,17 +142,30 @@ export function NewProjectPage() {
 
   function insertCommentTemplate(template: NoteTemplate) {
     const values: Record<string, string> = {
-      '{{project.name}}': projectName,
-      '{{project.number}}': projectNumber,
-      '{{project.status}}': status,
-      '{{project.source}}': source,
-      '{{project.ritmNumber}}': ritmNumber,
-      '{{project.investmentClass}}': investmentClass,
-      '{{project.fiscalYear}}': fiscalYear,
-      '{{project.businessUnit}}': businessUnit,
-      '{{org.name}}': orgName,
+      'project.number': projectNumber,
+      'project.name': projectName,
+      'project.status': status,
+      'project.source': source,
+      'project.dateNotificationReceived': dateNotificationReceived,
+      'project.notificationCancelled': boolText(notificationCancelled),
+      'project.ritmNumber': ritmNumber,
+      'project.investmentClass': investmentClass,
+      'project.description': description,
+      'project.fiscalYear': fiscalYear,
+      'project.piaNumber': piaNumber,
+      'project.ssdsTask': ssdsTask,
+      'project.ssdsType': ssdsType,
+      'project.uid': projectUid,
+      'project.businessUnit': businessUnit,
+      'project.businessSponsors': businessSponsors,
+      'project.demandNumber': demandNumber,
+      'project.assetsMentioned': assetsMentioned,
+      'project.comments': comments,
+      'project.createdBy': user?.name ?? user?.username ?? '',
+      'project.createdAt': '',
+      'org.name': orgName,
     };
-    const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
+    const body = replacePlaceholders(template.body, values);
     setComments((current) => {
       const trimmed = current.trimEnd();
       return `${trimmed}${trimmed ? '\n\n' : ''}${body}`;

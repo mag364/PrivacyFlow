@@ -8,6 +8,7 @@ import {
 import { platform } from '../../platform';
 import type { Project, AuditEvent, Communication, NoteTemplate } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
+import { projectPlaceholderValues, replacePlaceholders } from '@shared/placeholders';
 import {
   GlassPanel, GlassBadge, GlassButton, GlassInput, GlassSelect, GlassTextarea,
   Spinner, EmptyState, Field,
@@ -200,18 +201,7 @@ export function ProjectDetailPage() {
   function insertCommentTemplate(template: NoteTemplate) {
     setDraft((current) => {
       if (!current) return current;
-      const values: Record<string, string> = {
-        '{{project.name}}': current.projectName,
-        '{{project.number}}': current.projectNumber,
-        '{{project.status}}': current.status,
-        '{{project.source}}': current.source,
-        '{{project.ritmNumber}}': current.ritmNumber ?? '',
-        '{{project.investmentClass}}': current.investmentClass,
-        '{{project.fiscalYear}}': current.fiscalYear ?? '',
-        '{{project.businessUnit}}': current.businessUnit ?? '',
-        '{{org.name}}': orgName,
-      };
-      const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
+      const body = replacePlaceholders(template.body, projectPlaceholderValues(current, orgName));
       const trimmed = (current.comments ?? '').trimEnd();
       return {
         ...current,

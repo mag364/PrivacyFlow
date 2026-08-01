@@ -14,6 +14,7 @@ import {
   CASE_STATUSES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES,
   RELATIONSHIP_TYPES, REQUEST_TYPES,
 } from '@shared/constants';
+import { boolText, replacePlaceholders, requestIdForCase } from '@shared/placeholders';
 import {
   GlassPanel, GlassBadge, GlassButton, GlassInput, GlassSelect, GlassTextarea,
   Spinner, EmptyState, Field,
@@ -350,16 +351,42 @@ export function CaseDetailPage() {
     setDraft((current) => {
       if (!current) return current;
       const values: Record<string, string> = {
-        '{{requester.lastName}}': current.lastName,
-        '{{requester.email}}': current.email,
-        '{{case.number}}': current.dsrreqNumber,
-        '{{case.types}}': current.requestTypes.join(', '),
-        '{{case.status}}': current.closedDate ? 'Closed' : c.status,
-        '{{case.receivedDate}}': current.dateDppReceivedEmail || current.dateClientServiceReceivedEmail || c.createdAt.slice(0, 10),
-        '{{org.name}}': orgName,
-        '{{rule.department}}': '',
+        'case.requestId': requestIdForCase(c),
+        'case.number': current.dsrreqNumber,
+        'case.types': current.requestTypes.join(', '),
+        'case.status': current.closedDate ? 'Closed' : c.status,
+        'case.intakeChannel': current.intakeChannel,
+        'case.description': current.description,
+        'case.receivedDate': current.dateDppReceivedEmail || current.dateClientServiceReceivedEmail || c.createdAt.slice(0, 10),
+        'case.createdAt': c.createdAt,
+        'case.updatedAt': c.updatedAt,
+        'case.lastActivityAt': c.lastActivityAt,
+        'case.standardResponseSent': current.standardResponseSent,
+        'case.forwardedEmailToRon': current.forwardedEmailToRon,
+        'case.followUpEmailSent': current.followUpEmailSent,
+        'case.closedDate': current.closedDate,
+        'case.resolutionDate': current.closedDate || c.resolutionDate || '',
+        'case.priority': c.priority,
+        'case.risk': c.risk,
+        'case.businessUnit': c.businessUnit ?? '',
+        'case.ownerId': c.ownerId ?? '',
+        'case.team': c.team ?? '',
+        'case.tags': c.tags.join(', '),
+        'case.verificationStatus': String(c.verificationStatus),
+        'case.nextAction': c.nextAction,
+        'case.closureSummary': c.closureSummary ?? '',
+        'case.createdBy': c.createdBy,
+        'requester.lastName': current.lastName,
+        'requester.email': current.email,
+        'requester.relationship': current.relationship,
+        'requester.minor': boolText(current.minor),
+        'requester.authorizedAgent': boolText(current.authorizedAgent),
+        'requester.clientCenterStatus': current.clientCenterStatus,
+        'requester.emailedFA': current.emailedFA,
+        'org.name': orgName,
+        'rule.department': '',
       };
-      const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
+      const body = replacePlaceholders(template.body, values);
       const trimmed = current.description.trimEnd();
       return {
         ...current,

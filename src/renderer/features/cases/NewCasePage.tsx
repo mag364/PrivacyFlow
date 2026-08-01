@@ -5,6 +5,7 @@ import { platform } from '../../platform';
 import {
   REQUEST_TYPES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES, RELATIONSHIP_TYPES,
 } from '@shared/constants';
+import { boolText, replacePlaceholders } from '@shared/placeholders';
 import type { NewCaseInput } from '../../platform/types';
 import type { NoteTemplate, SourceEmail } from '@shared/types';
 import { PageHeader } from '../../layouts/AppShell';
@@ -134,16 +135,42 @@ export function NewCasePage() {
 
   function insertDescriptionTemplate(template: NoteTemplate) {
     const values: Record<string, string> = {
-      '{{requester.lastName}}': lastName,
-      '{{requester.email}}': email,
-      '{{case.number}}': dsrreqNumber,
-      '{{case.types}}': requestTypes.join(', '),
-      '{{case.status}}': 'New',
-      '{{case.receivedDate}}': dateDppReceived || dateCsReceived || new Date().toISOString().slice(0, 10),
-      '{{org.name}}': orgName,
-      '{{rule.department}}': '',
+      'case.requestId': requestId,
+      'case.number': dsrreqNumber,
+      'case.types': requestTypes.join(', '),
+      'case.status': 'New',
+      'case.intakeChannel': intakeChannel,
+      'case.description': description,
+      'case.receivedDate': dateDppReceived || dateCsReceived || new Date().toISOString().slice(0, 10),
+      'case.createdAt': '',
+      'case.updatedAt': '',
+      'case.lastActivityAt': '',
+      'case.standardResponseSent': standardResponseSent,
+      'case.forwardedEmailToRon': forwardedToRon,
+      'case.followUpEmailSent': '',
+      'case.closedDate': '',
+      'case.resolutionDate': '',
+      'case.priority': 'Medium',
+      'case.risk': 'Medium',
+      'case.businessUnit': '',
+      'case.ownerId': '',
+      'case.team': '',
+      'case.tags': '',
+      'case.verificationStatus': '',
+      'case.nextAction': '',
+      'case.closureSummary': '',
+      'case.createdBy': user?.name ?? user?.username ?? '',
+      'requester.lastName': lastName,
+      'requester.email': email,
+      'requester.relationship': relationship,
+      'requester.minor': boolText(minor),
+      'requester.authorizedAgent': boolText(authorizedAgent),
+      'requester.clientCenterStatus': clientCenterStatus,
+      'requester.emailedFA': emailedFA,
+      'org.name': orgName,
+      'rule.department': '',
     };
-    const body = template.body.replace(/\{\{[^}]+\}\}/g, (match) => values[match] ?? '');
+    const body = replacePlaceholders(template.body, values);
     setDescription((current) => {
       const trimmed = current.trimEnd();
       return `${trimmed}${trimmed ? '\n\n' : ''}${body}`;

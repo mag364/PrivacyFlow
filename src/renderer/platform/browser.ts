@@ -7,6 +7,7 @@ import type {
 import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
+import { replacePlaceholders, requestPlaceholderValues } from '@shared/placeholders';
 import { computeDueDate } from '@shared/sla';
 import { verifyChain } from '@shared/audit';
 import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared/password';
@@ -291,26 +292,8 @@ function changedAutomationFields(before: DsrCase, after: DsrCase): string[] {
 
 // ---- Email automation engine -------------------------------------------------
 
-const DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
-function fmtShort(iso?: string): string {
-  if (!iso) return '—';
-  const d = parseISO(iso);
-  return Number.isNaN(d.getTime()) ? '—' : DATE_FMT.format(d);
-}
-
 function renderTemplate(text: string, c: DsrCase, orgName: string, department?: string): string {
-  const map: Record<string, string> = {
-    'requester.lastName': c.subject.lastName,
-    'requester.email': c.subject.emails[0] ?? '',
-    'case.number': c.caseNumber,
-    'case.types': c.requestTypes.join(', '),
-    'case.status': c.status,
-    'case.receivedDate': fmtShort(c.sla.receivedDate),
-    'org.name': orgName,
-    'rule.department': department ?? '',
-  };
-  return text.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (m, key) => map[key] ?? m);
+  return replacePlaceholders(text, requestPlaceholderValues(c, orgName, department));
 }
 
 function formatOriginalEmail(source: SourceEmail): string {

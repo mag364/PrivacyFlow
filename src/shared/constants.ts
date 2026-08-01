@@ -98,6 +98,7 @@ export const RELATIONSHIP_TYPES = [
   'Employee',
   'Former Employee',
   'Prospect',
+  'Inactive',
   'Vendor',
   'Other',
 ] as const;

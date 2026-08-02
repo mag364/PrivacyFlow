@@ -1,18 +1,28 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Plus, Download, FolderKanban, CalendarDays, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import {
+  Search, Plus, Download, FolderKanban, CalendarDays, ChevronLeft, ChevronRight,
+  ChevronsLeft, ChevronsRight, Layers,
+} from 'lucide-react';
 import { platform } from '../../platform';
-import type { DsrCase } from '@shared/types';
+import type { CaseLink, DsrCase } from '@shared/types';
 import { CASE_STATUSES, OPEN_STATUSES, REQUEST_TYPES } from '@shared/constants';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassBadge, Spinner, EmptyState } from '../../components/glass';
 import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
+import { requestIdForCase } from '@shared/placeholders';
 import { readLastYear, writeLastYear, clearLastYear } from '../../lib/lastYear';
 import { useAuth, can } from '../../store/auth';
 
 type StatusFilter = 'all' | 'open' | 'closed' | string;
 const PAGE_SIZE = 15;
 const FILTERS_KEY = 'privacyflow.requests.filters.v1';
+const COLLAPSED_DEFAULT = true;
+
+interface RequestGroup {
+  key: string;
+  children: DsrCase[];
+}
 
 function readFilters(): { q: string; status: StatusFilter; type: string; page: number } {
   try {
@@ -27,10 +37,12 @@ export function CasesPage() {
   const year = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : null;
 
   const [cases, setCases] = React.useState<DsrCase[] | null>(null);
+  const [caseLinks, setCaseLinks] = React.useState<CaseLink[]>([]);
   const savedFilters = React.useMemo(readFilters, []);
   const [q, setQ] = React.useState(savedFilters.q);
   const [status, setStatus] = React.useState<StatusFilter>(savedFilters.status);
   const [type, setType] = React.useState<string>(savedFilters.type);
+  const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
   const [page, setPage] = React.useState(savedFilters.page);
   const didInitFilters = React.useRef(false);
   const navigate = useNavigate();
@@ -46,7 +58,11 @@ export function CasesPage() {
   }, [year, navigate]);
 
   React.useEffect(() => {
-    platform().cases.list().then(setCases);
+    Promise.all([platform().cases.list(), platform().cases.links()])
+      .then(([caseRows, links]) => {
+        setCases(caseRows);
+        setCaseLinks(links);
+      });
   }, [year]);
 
   React.useEffect(() => {
@@ -81,10 +97,72 @@ export function CasesPage() {
   });
 
   rows = [...rows].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
-  const pageCount = Math.max(Math.ceil(rows.length / PAGE_SIZE), 1);
+
+  const rowById = new Map(rows.map((caseItem) => [caseItem.id, caseItem]));
+  const adjacency = new Map<string, Set<string>>();
+  for (const caseItem of rows) adjacency.set(caseItem.id, new Set());
+  for (const link of caseLinks) {
+    if (!rowById.has(link.caseId) || !rowById.has(link.relatedCaseId)) continue;
+    adjacency.get(link.caseId)?.add(link.relatedCaseId);
+    adjacency.get(link.relatedCaseId)?.add(link.caseId);
+  }
+
+  const visited = new Set<string>();
+  const groups: RequestGroup[] = [];
+  for (const caseItem of rows) {
+    if (visited.has(caseItem.id)) continue;
+    const stack = [caseItem.id];
+    const children: DsrCase[] = [];
+    visited.add(caseItem.id);
+    while (stack.length) {
+      const currentId = stack.pop()!;
+      const current = rowById.get(currentId);
+      if (current) children.push(current);
+      for (const nextId of adjacency.get(currentId) ?? []) {
+        if (visited.has(nextId)) continue;
+        visited.add(nextId);
+        stack.push(nextId);
+      }
+    }
+    children.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+    groups.push({ key: children.map((child) => child.id).sort().join(':'), children });
+  }
+  groups.sort((a, b) => b.children[0].lastActivityAt.localeCompare(a.children[0].lastActivityAt));
+
+  const groupedCount = groups.filter((g) => g.children.length > 1).length;
+  const pageCount = Math.max(Math.ceil(groups.length / PAGE_SIZE), 1);
   const currentPage = Math.min(page, pageCount - 1);
   const pageStart = currentPage * PAGE_SIZE;
-  const pageRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageGroups = groups.slice(pageStart, pageStart + PAGE_SIZE);
+
+  function requestId(c: DsrCase): string {
+    return requestIdForCase(c) || '—';
+  }
+
+  function receivedDate(c: DsrCase): string {
+    return c.intakeDates?.dateDppReceivedEmail ?? c.sla.receivedDate;
+  }
+
+  function isGroupCollapsed(key: string): boolean {
+    return collapsed[key] ?? COLLAPSED_DEFAULT;
+  }
+
+  function toggleGroup(key: string) {
+    setCollapsed((prev) => ({ ...prev, [key]: !(prev[key] ?? COLLAPSED_DEFAULT) }));
+  }
+
+  function parentStatuses(g: RequestGroup): string {
+    const distinct = Array.from(new Set(g.children.map((c) => c.status)));
+    return distinct.length === 1 ? distinct[0] : 'Grouped';
+  }
+
+  function parentRequestIds(g: RequestGroup): string {
+    return `${g.children.length} linked`;
+  }
+
+  function parentTypes(g: RequestGroup): string {
+    return Array.from(new Set(g.children.flatMap((c) => c.requestTypes.map(String)))).join(', ');
+  }
 
   function showAllYears() {
     clearLastYear('cases');
@@ -146,7 +224,7 @@ export function CasesPage() {
     <div>
       <PageHeader
         title={year ? `Requests — ${year}` : 'Requests'}
-        subtitle={`${rows.length} request${rows.length === 1 ? '' : 's'} shown${year ? ` received in ${year}` : ''}.`}
+        subtitle={`${rows.length} request${rows.length === 1 ? '' : 's'} shown${year ? ` received in ${year}` : ''}${groupedCount ? ` · ${groupedCount} related group${groupedCount === 1 ? '' : 's'}` : ''}.`}
         actions={
           <>
             {year && (
@@ -205,35 +283,83 @@ export function CasesPage() {
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((c) => {
-                const requestId =
-                  c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ??
-                  c.subject.firstName ??
-                  '—';
-                const dateReceived = c.intakeDates?.dateDppReceivedEmail ?? c.sla.receivedDate;
+              {pageGroups.map((g) => {
+                if (g.children.length === 1) {
+                  const c = g.children[0];
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => navigate(`/cases/${c.id}`)}
+                      className="cursor-pointer border-b border-line/60 hover:bg-[var(--pf-highlight)]"
+                    >
+                      <td className="px-4 py-3 font-medium text-accent">{requestId(c)}</td>
+                      <td className="px-4 py-3"><GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge></td>
+                      <td className="px-4 py-3 text-ink/90">{c.caseNumber}</td>
+                      <td className="px-4 py-3 text-ink">{c.subject.lastName}</td>
+                      <td className="px-4 py-3 text-muted">{c.requestTypes.join(', ')}</td>
+                      <td className="px-4 py-3 text-ink/90">{fmtDate(receivedDate(c))}</td>
+                    </tr>
+                  );
+                }
+
+                const parent = g.children[0];
+                const isCollapsed = isGroupCollapsed(g.key);
+                const statusLabel = parentStatuses(g);
                 return (
-                  <tr
-                    key={c.id}
-                    onClick={() => navigate(`/cases/${c.id}`)}
-                    className="cursor-pointer border-b border-line/60 hover:bg-[var(--pf-highlight)]"
-                  >
-                    <td className="px-4 py-3 font-medium text-accent">{requestId}</td>
-                    <td className="px-4 py-3"><GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge></td>
-                    <td className="px-4 py-3 text-ink/90">{c.caseNumber}</td>
-                    <td className="px-4 py-3 text-ink">{c.subject.lastName}</td>
-                    <td className="px-4 py-3 text-muted">{c.requestTypes.join(', ')}</td>
-                    <td className="px-4 py-3 text-ink/90">{fmtDate(dateReceived)}</td>
-                  </tr>
+                  <React.Fragment key={g.key}>
+                    <tr
+                      onClick={() => toggleGroup(g.key)}
+                      className="cursor-pointer border-b border-line/60 bg-[var(--pf-highlight)]/50 hover:bg-[var(--pf-highlight)]"
+                      aria-expanded={!isCollapsed}
+                    >
+                      <td className="px-4 py-3">
+                        <span className="flex items-center gap-1.5 font-medium text-accent">
+                          <ChevronRight className={`h-3.5 w-3.5 text-muted transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
+                          <Layers className="h-3.5 w-3.5" />
+                          {parentRequestIds(g)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {statusLabel === 'Grouped'
+                          ? <span className="text-muted">Grouped</span>
+                          : <GlassBadge tone={statusTone(statusLabel)}>{statusLabel}</GlassBadge>}
+                      </td>
+                      <td className="px-4 py-3 text-muted">{g.children.length} PH records</td>
+                      <td className="px-4 py-3 text-ink">
+                        <span className="flex items-center gap-2">
+                          {parent.subject.lastName}
+                          <GlassBadge tone="info">{g.children.length} linked</GlassBadge>
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted">{parentTypes(g)}</td>
+                      <td className="px-4 py-3 text-muted">{fmtDate(receivedDate(parent))}</td>
+                    </tr>
+                    {!isCollapsed &&
+                      g.children.map((c) => (
+                        <tr
+                          key={c.id}
+                          onClick={() => navigate(`/cases/${c.id}`)}
+                          className="cursor-pointer border-b border-line/60 hover:bg-[var(--pf-highlight)]"
+                        >
+                          <td className="py-3 pl-10 pr-4 font-medium text-accent">{requestId(c)}</td>
+                          <td className="px-4 py-3"><GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge></td>
+                          <td className="px-4 py-3 text-ink/90">{c.caseNumber}</td>
+                          <td className="px-4 py-3 text-ink">{c.subject.lastName}</td>
+                          <td className="px-4 py-3 text-muted">{c.requestTypes.join(', ')}</td>
+                          <td className="px-4 py-3 text-ink/90">{fmtDate(receivedDate(c))}</td>
+                        </tr>
+                      ))}
+                  </React.Fragment>
                 );
               })}
             </tbody>
           </table>
         )}
       </div>
-      {rows.length > PAGE_SIZE && (
+      {groups.length > PAGE_SIZE && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
           <span>
-            Showing {pageStart + 1}-{Math.min(pageStart + pageRows.length, rows.length)} of {rows.length} requests
+            Showing {pageStart + 1}-{Math.min(pageStart + pageGroups.length, groups.length)} of {groups.length} request rows/groups
           </span>
           <div className="flex items-center gap-2">
             <GlassButton

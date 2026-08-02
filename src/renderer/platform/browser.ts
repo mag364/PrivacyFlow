@@ -1595,6 +1595,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
       async documents(id: string) {
         return clone(db().documents.filter((x) => x.caseId === id));
       },
+      async links() {
+        return clone(db().caseLinks ?? []);
+      },
       async related(id: string) {
         const d = db();
         const relatedIds = new Set(

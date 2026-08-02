@@ -189,6 +189,7 @@ export interface PrivacyFlowAPI {
     communications: (id: string) => Promise<Communication[]>;
     decisions: (id: string) => Promise<Decision[]>;
     documents: (id: string) => Promise<CaseDocument[]>;
+    links: () => Promise<CaseLink[]>;
     related: (id: string) => Promise<DsrCase[]>;
     link: (id: string, relatedCaseId: string, reason?: string) => Promise<CaseLink>;
     unlink: (id: string, relatedCaseId: string) => Promise<void>;

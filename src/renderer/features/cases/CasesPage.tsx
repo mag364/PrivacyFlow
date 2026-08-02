@@ -18,6 +18,7 @@ type StatusFilter = 'all' | 'open' | 'closed' | string;
 const PAGE_SIZE = 15;
 const FILTERS_KEY = 'privacyflow.requests.filters.v1';
 const COLLAPSED_DEFAULT = true;
+const CLOSED_STATUS_RANK = CASE_STATUSES.indexOf('Closed');
 
 interface RequestGroup {
   key: string;
@@ -30,6 +31,16 @@ function readFilters(): { q: string; status: StatusFilter; type: string; page: n
   } catch {
     return { q: '', status: 'all', type: 'all', page: 0 };
   }
+}
+
+function statusRank(status: string): number {
+  const rank = CASE_STATUSES.indexOf(status as (typeof CASE_STATUSES)[number]);
+  if (rank >= 0) return rank;
+  return Math.max(CLOSED_STATUS_RANK - 1, 0);
+}
+
+function compareRequests(a: DsrCase, b: DsrCase): number {
+  return statusRank(a.status) - statusRank(b.status) || b.lastActivityAt.localeCompare(a.lastActivityAt);
 }
 
 export function CasesPage() {
@@ -96,7 +107,7 @@ export function CasesPage() {
     return true;
   });
 
-  rows = [...rows].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  rows = [...rows].sort(compareRequests);
 
   const rowById = new Map(rows.map((caseItem) => [caseItem.id, caseItem]));
   const adjacency = new Map<string, Set<string>>();
@@ -124,10 +135,14 @@ export function CasesPage() {
         stack.push(nextId);
       }
     }
-    children.sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+    children.sort(compareRequests);
     groups.push({ key: children.map((child) => child.id).sort().join(':'), children });
   }
-  groups.sort((a, b) => b.children[0].lastActivityAt.localeCompare(a.children[0].lastActivityAt));
+  groups.sort((a, b) => {
+    const aRank = Math.min(...a.children.map((child) => statusRank(child.status)));
+    const bRank = Math.min(...b.children.map((child) => statusRank(child.status)));
+    return aRank - bRank || b.children[0].lastActivityAt.localeCompare(a.children[0].lastActivityAt);
+  });
 
   const groupedCount = groups.filter((g) => g.children.length > 1).length;
   const pageCount = Math.max(Math.ceil(groups.length / PAGE_SIZE), 1);

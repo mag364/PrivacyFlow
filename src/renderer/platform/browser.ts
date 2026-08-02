@@ -2,7 +2,7 @@ import { addDays, isSameMonth, parseISO } from 'date-fns';
 import type {
   DsrCase, AuditEvent, IntegrityReport, OrgSettings, CaseNote, SlaInfo, Project, SlaRule,
   EmailTemplate, AutomationRule, AutomationTrigger, AutomationRecipient, User, CaseDocument, Communication,
-  SourceEmail, NoteTemplate,
+  SourceEmail, NoteTemplate, CaseLink,
 } from '@shared/types';
 import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
@@ -624,6 +624,7 @@ function load(): Db | null {
   try {
     cache = JSON.parse(raw) as Db;
     if (!Array.isArray(cache.projects)) cache.projects = [];
+    if (!Array.isArray(cache.caseLinks)) cache.caseLinks = [];
     if (typeof cache.projectSeq !== 'number') cache.projectSeq = 0;
     const d = defaultSettings();
     const s = cache.settings as OrgSettings;
@@ -695,6 +696,15 @@ function actorOf(d: Db) {
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
+}
+
+function linkKey(a: string, b: string): string {
+  return [a, b].sort().join('::');
+}
+
+function caseLabel(c: DsrCase): string {
+  const requestId = c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '';
+  return requestId || c.caseNumber || c.id;
 }
 
 // A user object safe to hand to the renderer: the password hash never leaves
@@ -964,6 +974,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           d.documents = d.documents.filter((doc) => !caseIds.has(doc.caseId));
           d.statusHistory = d.statusHistory.filter((entry) => !caseIds.has(entry.caseId));
           d.slaHistory = d.slaHistory.filter((entry) => !caseIds.has(entry.caseId));
+          d.caseLinks = (d.caseLinks ?? []).filter((link) => !caseIds.has(link.caseId) && !caseIds.has(link.relatedCaseId));
           d.projects = d.projects.filter((p) => !projectIds.has(p.id));
         }
 
@@ -990,6 +1001,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           exportedAt: new Date().toISOString(),
           cases: clone(d.cases),
           projects: clone(d.projects),
+          caseLinks: clone(d.caseLinks ?? []),
         };
       },
       async importCases(input: NewCaseInput[]): Promise<ImportSummary> {
@@ -1035,12 +1047,13 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         save(d);
         return summary;
       },
-      async importTracking(input: { cases?: DsrCase[]; projects?: Project[] }): Promise<ImportSummary> {
+      async importTracking(input: { cases?: DsrCase[]; projects?: Project[]; caseLinks?: CaseLink[] }): Promise<ImportSummary> {
         assertWritable();
         const d = db();
         const actor = actorOf(d);
         const summary: ImportSummary = { cases: 0, projects: 0, skipped: 0, errors: [] };
         const existingCases = new Set(d.cases.map((c) => c.caseNumber.trim().toLowerCase()));
+        const importedCaseIds = new Map<string, string>();
         for (const [index, c] of (input.cases ?? []).entries()) {
           try {
             if (existingCases.has(c.caseNumber.trim().toLowerCase())) {
@@ -1060,6 +1073,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
               intakeDates: c.intakeDates,
             }, actor, CASE_STATUSES.includes(c.status as CaseStatus) ? c.status as CaseStatus : 'New');
             existingCases.add(imported.caseNumber.trim().toLowerCase());
+            importedCaseIds.set(c.id, imported.id);
             summary.cases += 1;
           } catch (e) {
             summary.errors.push(`PrivacyFlow request ${index + 1}: ${e instanceof Error ? e.message : 'Import failed.'}`);
@@ -1079,6 +1093,23 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
             summary.projects += 1;
           } catch (e) {
             summary.errors.push(`PrivacyFlow project ${index + 1}: ${e instanceof Error ? e.message : 'Import failed.'}`);
+          }
+        }
+        for (const link of (input.caseLinks ?? [])) {
+          const caseId = importedCaseIds.get(link.caseId) ?? (d.cases.some((c) => c.id === link.caseId) ? link.caseId : '');
+          const relatedCaseId = importedCaseIds.get(link.relatedCaseId) ?? (d.cases.some((c) => c.id === link.relatedCaseId) ? link.relatedCaseId : '');
+          if (!caseId || !relatedCaseId || caseId === relatedCaseId) continue;
+          const key = linkKey(caseId, relatedCaseId);
+          const exists = (d.caseLinks ?? []).some((x) => linkKey(x.caseId, x.relatedCaseId) === key);
+          if (!exists) {
+            d.caseLinks.push({
+              id: uid(),
+              caseId,
+              relatedCaseId,
+              reason: link.reason,
+              createdAt: new Date().toISOString(),
+              createdBy: actor?.id ?? 'system',
+            });
           }
         }
         save(d);
@@ -1563,6 +1594,94 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
       },
       async documents(id: string) {
         return clone(db().documents.filter((x) => x.caseId === id));
+      },
+      async related(id: string) {
+        const d = db();
+        const relatedIds = new Set(
+          (d.caseLinks ?? [])
+            .filter((link) => link.caseId === id || link.relatedCaseId === id)
+            .map((link) => (link.caseId === id ? link.relatedCaseId : link.caseId)),
+        );
+        return clone(
+          d.cases
+            .filter((x) => relatedIds.has(x.id))
+            .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt)),
+        );
+      },
+      async link(id: string, relatedCaseId: string, reason?: string) {
+        assertWritable();
+        const d = db();
+        const c = d.cases.find((x) => x.id === id);
+        const related = d.cases.find((x) => x.id === relatedCaseId);
+        if (!c || !related) throw new Error('Request not found');
+        if (id === relatedCaseId) throw new Error('A request cannot be related to itself.');
+        const key = linkKey(id, relatedCaseId);
+        const existing = (d.caseLinks ?? []).find((x) => linkKey(x.caseId, x.relatedCaseId) === key);
+        if (existing) return clone(existing);
+        const now = new Date().toISOString();
+        const actor = actorOf(d);
+        const link: CaseLink = {
+          id: uid(),
+          caseId: id,
+          relatedCaseId,
+          reason: reason?.trim() || undefined,
+          createdAt: now,
+          createdBy: actor?.id ?? 'system',
+        };
+        d.caseLinks.push(link);
+        c.updatedAt = now;
+        c.lastActivityAt = now;
+        related.updatedAt = now;
+        related.lastActivityAt = now;
+        await appendAudit(d, actor, {
+          category: 'Case',
+          action: 'case.related_linked',
+          entityType: 'case_link',
+          entityId: link.id,
+          caseId: id,
+          summary: `Linked ${caseLabel(c)} with related request ${caseLabel(related)}`,
+          newValue: { caseId: id, relatedCaseId, reason: link.reason },
+        });
+        await appendAudit(d, actor, {
+          category: 'Case',
+          action: 'case.related_linked',
+          entityType: 'case_link',
+          entityId: link.id,
+          caseId: relatedCaseId,
+          summary: `Linked ${caseLabel(related)} with related request ${caseLabel(c)}`,
+          newValue: { caseId: relatedCaseId, relatedCaseId: id, reason: link.reason },
+        });
+        save(d);
+        return clone(link);
+      },
+      async unlink(id: string, relatedCaseId: string) {
+        assertWritable();
+        const d = db();
+        const key = linkKey(id, relatedCaseId);
+        const link = (d.caseLinks ?? []).find((x) => linkKey(x.caseId, x.relatedCaseId) === key);
+        if (!link) return;
+        const c = d.cases.find((x) => x.id === id);
+        const related = d.cases.find((x) => x.id === relatedCaseId);
+        d.caseLinks = d.caseLinks.filter((x) => x.id !== link.id);
+        const now = new Date().toISOString();
+        if (c) {
+          c.updatedAt = now;
+          c.lastActivityAt = now;
+        }
+        if (related) {
+          related.updatedAt = now;
+          related.lastActivityAt = now;
+        }
+        await appendAudit(d, actorOf(d), {
+          category: 'Case',
+          action: 'case.related_unlinked',
+          entityType: 'case_link',
+          entityId: link.id,
+          caseId: id,
+          summary: `Removed related request link between ${c ? caseLabel(c) : id} and ${related ? caseLabel(related) : relatedCaseId}`,
+          previousValue: link,
+        });
+        save(d);
       },
       async addNote(id: string, content: string, category: string) {
         assertWritable();

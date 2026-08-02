@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import {
   ArrowLeft, Mail, ShieldCheck, FileText, MessageSquare,
   StickyNote, ClipboardList, Send, Upload, Paperclip, Pencil, Check, X, Save,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Link2, Unlink, Search,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type {
@@ -78,6 +78,10 @@ export function CaseDetailPage() {
   const [docs, setDocs] = React.useState<CaseDocument[]>([]);
   const [audit, setAudit] = React.useState<AuditEvent[]>([]);
   const [auditPage, setAuditPage] = React.useState(0);
+  const [allCases, setAllCases] = React.useState<DsrCase[]>([]);
+  const [relatedCases, setRelatedCases] = React.useState<DsrCase[]>([]);
+  const [relatedSearch, setRelatedSearch] = React.useState('');
+  const [relatedError, setRelatedError] = React.useState('');
   const [noteText, setNoteText] = React.useState('');
   const [noteCat, setNoteCat] = React.useState('General');
   const [statusReason, setStatusReason] = React.useState('');
@@ -123,6 +127,8 @@ export function CaseDetailPage() {
       setComms(await p.communications(id));
       setDocs(await p.documents(id));
       setAudit(await platform().audit.byCase(id));
+      setRelatedCases(await p.related(id));
+      setAllCases(await p.list());
     }
   }, [id]);
 
@@ -166,6 +172,18 @@ export function CaseDetailPage() {
 
   const requestIdValue =
     c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? c.subject.firstName ?? '—';
+  const relatedIds = new Set(relatedCases.map((caseItem) => caseItem.id));
+  const relatedCandidates = allCases
+    .filter((caseItem) => caseItem.id !== c.id && !relatedIds.has(caseItem.id))
+    .filter((caseItem) => {
+      const query = relatedSearch.trim().toLowerCase();
+      if (!query) return false;
+      const requestId = requestIdForCase(caseItem);
+      const hay = `${requestId} ${caseItem.caseNumber} ${caseItem.subject.lastName} ${caseItem.subject.emails.join(' ')}`.toLowerCase();
+      return hay.includes(query);
+    })
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
+    .slice(0, 5);
 
   function startEdit() {
     setDraft({
@@ -254,6 +272,27 @@ export function CaseDetailPage() {
     await platform().cases.addNote(id, noteText.trim(), noteCat);
     setNoteText('');
     await load();
+  }
+
+  async function linkRelatedCase(relatedId: string, reason = 'Manually linked from Request Details') {
+    setRelatedError('');
+    try {
+      await platform().cases.link(id, relatedId, reason);
+      setRelatedSearch('');
+      await load();
+    } catch (e) {
+      setRelatedError(e instanceof Error ? e.message : 'Unable to link request.');
+    }
+  }
+
+  async function unlinkRelatedCase(relatedId: string) {
+    setRelatedError('');
+    try {
+      await platform().cases.unlink(id, relatedId);
+      await load();
+    } catch (e) {
+      setRelatedError(e instanceof Error ? e.message : 'Unable to unlink request.');
+    }
   }
 
   async function saveCaseNumber() {
@@ -911,6 +950,81 @@ export function CaseDetailPage() {
                 <span className="flex items-center gap-2">Client Center: <GlassBadge tone={c.subject.clientCenterStatus === 'Located' ? 'success' : 'warn'}>{c.subject.clientCenterStatus}</GlassBadge></span>
               )}
             </div>
+          </GlassPanel>
+
+          <GlassPanel>
+            <div className="mb-3 flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-accent" />
+              <h3 className="text-sm font-semibold text-ink">Related requests</h3>
+            </div>
+            {relatedCases.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {relatedCases.map((caseItem) => {
+                  const relatedRequestId = requestIdForCase(caseItem) || 'No Request ID';
+                  return (
+                    <div key={caseItem.id} className="rounded-xl border border-line px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/cases/${caseItem.id}`)}
+                        className="block w-full text-left focus-ring"
+                      >
+                        <span className="block text-sm font-medium text-accent">{relatedRequestId}</span>
+                        <span className="block truncate text-xs text-muted">
+                          {caseItem.caseNumber || 'No DSRREQ #'} · {caseItem.requestTypes.join(', ')} · {caseItem.status}
+                        </span>
+                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => unlinkRelatedCase(caseItem.id)}
+                          className="mt-2 inline-flex items-center gap-1 rounded-capsule px-2 py-1 text-[11px] text-muted hover:bg-[var(--pf-highlight)] hover:text-red-400 focus-ring"
+                        >
+                          <Unlink className="h-3 w-3" /> Unlink
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted">No related requests linked yet.</p>
+            )}
+
+            {canEdit && (
+              <div className="mt-4">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+                  <GlassInput
+                    className="pl-8 text-xs"
+                    value={relatedSearch}
+                    onChange={(e) => setRelatedSearch(e.target.value)}
+                    placeholder="Search PH, DSRREQ, email..."
+                  />
+                </div>
+                {relatedCandidates.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {relatedCandidates.map((caseItem) => {
+                      const candidateRequestId = requestIdForCase(caseItem) || 'No Request ID';
+                      return (
+                        <button
+                          key={caseItem.id}
+                          type="button"
+                          onClick={() => linkRelatedCase(caseItem.id)}
+                          className="rounded-lg border border-line px-2 py-1.5 text-left text-xs text-muted hover:bg-[var(--pf-highlight)] hover:text-ink focus-ring"
+                        >
+                          <span className="block font-medium text-ink">{candidateRequestId}</span>
+                          <span className="block truncate">{caseItem.caseNumber || 'No DSRREQ #'} · {caseItem.subject.emails[0] ?? 'No email'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {relatedSearch.trim() && relatedCandidates.length === 0 && (
+                  <p className="mt-2 text-[11px] text-muted">No unlinked matching requests found.</p>
+                )}
+                {relatedError && <p className="mt-2 text-xs text-red-400">{relatedError}</p>}
+              </div>
+            )}
           </GlassPanel>
 
           {canEdit && (

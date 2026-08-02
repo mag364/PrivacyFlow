@@ -5,9 +5,9 @@ import { platform } from '../../platform';
 import {
   REQUEST_TYPES, INTAKE_CHANNELS, CLIENT_CENTER_STATUSES, RELATIONSHIP_TYPES,
 } from '@shared/constants';
-import { boolText, replacePlaceholders } from '@shared/placeholders';
+import { boolText, replacePlaceholders, requestIdForCase } from '@shared/placeholders';
 import type { NewCaseInput } from '../../platform/types';
-import type { NoteTemplate, SourceEmail } from '@shared/types';
+import type { DsrCase, NoteTemplate, SourceEmail } from '@shared/types';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
@@ -21,6 +21,7 @@ export function NewCasePage() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [requestIdPrefix, setRequestIdPrefix] = React.useState('');
   const [orgName, setOrgName] = React.useState('');
+  const [existingCases, setExistingCases] = React.useState<DsrCase[]>([]);
 
   const [requestId, setRequestId] = React.useState('');
   const [dsrreqNumber, setDsrreqNumber] = React.useState('');
@@ -42,15 +43,30 @@ export function NewCasePage() {
   const [descriptionTemplates, setDescriptionTemplates] = React.useState<NoteTemplate[]>([]);
   const [sourceEmail, setSourceEmail] = React.useState<SourceEmail | null>(null);
   const [sourceEmailError, setSourceEmailError] = React.useState('');
+  const [relatedCaseIds, setRelatedCaseIds] = React.useState<string[]>([]);
   const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   React.useEffect(() => {
+    platform().cases.list().then(setExistingCases).catch(() => setExistingCases([]));
     platform().system.settings().then((settings) => {
       setRequestIdPrefix(settings.caseNumberPrefix);
       setOrgName(settings.organizationName);
       setDescriptionTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'description'));
     });
   }, []);
+
+  const possibleRelatedCases = React.useMemo(() => {
+    const normalized = email.trim().toLowerCase();
+    if (!/.+@.+\..+/.test(normalized)) return [];
+    return existingCases
+      .filter((caseItem) => caseItem.subject.emails.some((candidate) => candidate.trim().toLowerCase() === normalized))
+      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
+      .slice(0, 6);
+  }, [email, existingCases]);
+
+  React.useEffect(() => {
+    setRelatedCaseIds((ids) => ids.filter((id) => possibleRelatedCases.some((caseItem) => caseItem.id === id)));
+  }, [possibleRelatedCases]);
 
   if (!can(user?.role, 'requests.create')) {
     return (
@@ -130,9 +146,21 @@ export function NewCasePage() {
       },
       sourceEmail: sourceEmail ?? undefined,
     };
-    const created = await platform().cases.create(input);
-    setBusy(false);
-    navigate(`/cases/${created.id}`);
+    try {
+      const created = await platform().cases.create(input);
+      for (const relatedId of relatedCaseIds) {
+        await platform().cases.link(created.id, relatedId, 'Matched requester email during request creation');
+      }
+      setBusy(false);
+      navigate(`/cases/${created.id}`);
+    } catch (e) {
+      setBusy(false);
+      setErrors({ submit: e instanceof Error ? e.message : 'Unable to create request.' });
+    }
+  }
+
+  function toggleRelatedCase(id: string) {
+    setRelatedCaseIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   }
 
   function insertDescriptionTemplate(template: NoteTemplate) {
@@ -204,6 +232,31 @@ export function NewCasePage() {
             <Field label="Email" error={errors.email}>
               <GlassInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
+            {possibleRelatedCases.length > 0 && (
+              <div className="rounded-xl border border-line bg-[var(--pf-highlight)] px-3 py-2">
+                <p className="text-xs font-semibold text-ink">Possible related requests</p>
+                <p className="mt-0.5 text-[11px] text-muted">These requests use the same email. Select any that belong with this new request.</p>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {possibleRelatedCases.map((caseItem) => {
+                    const requestId = requestIdForCase(caseItem) || 'No Request ID';
+                    return (
+                      <label key={caseItem.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-muted hover:bg-[var(--pf-surface)]">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 focus-ring"
+                          checked={relatedCaseIds.includes(caseItem.id)}
+                          onChange={() => toggleRelatedCase(caseItem.id)}
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          <span className="text-ink">{requestId}</span>
+                          {caseItem.caseNumber ? ` · ${caseItem.caseNumber}` : ''} · {caseItem.requestTypes.join(', ')} · {caseItem.status}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Client Center Status">
                 <GlassSelect value={clientCenterStatus} onChange={(e) => setClientCenterStatus(e.target.value)}>
@@ -329,6 +382,7 @@ export function NewCasePage() {
             </div>
           )}
           <div className="mt-4 flex justify-end gap-2">
+            {errors.submit && <p className="mr-auto self-center text-xs text-red-400">{errors.submit}</p>}
             <GlassButton type="button" onClick={() => navigate('/cases')}>Cancel</GlassButton>
             <GlassButton type="submit" variant="primary" loading={busy}>Create request</GlassButton>
           </div>

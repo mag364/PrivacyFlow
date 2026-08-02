@@ -2,7 +2,7 @@ import type {
   DsrCase, User, AuditEvent, IntegrityReport, OrgSettings, Task, CaseNote,
   Communication, Decision, CaseDocument, StatusHistoryEntry, SlaHistoryEntry,
   DataSubject, IntakeDates, Project,
-  SourceEmail,
+  SourceEmail, CaseLink,
 } from '@shared/types';
 import type {
   CaseStatus, RequestType, IntakeChannel, Jurisdiction, Priority, RiskLevel, Role,
@@ -96,6 +96,7 @@ export interface TrackingExport {
   exportedAt: string;
   cases: DsrCase[];
   projects: Project[];
+  caseLinks?: CaseLink[];
 }
 
 export interface LoginResult {
@@ -157,7 +158,7 @@ export interface PrivacyFlowAPI {
     applyRetentionCleanup: (options?: RetentionCleanupOptions) => Promise<RetentionCleanupSummary>;
     resetApplication: () => Promise<void>;
     exportTracking: () => Promise<TrackingExport>;
-    importTracking: (input: { cases?: DsrCase[]; projects?: Project[] }) => Promise<ImportSummary>;
+    importTracking: (input: { cases?: DsrCase[]; projects?: Project[]; caseLinks?: CaseLink[] }) => Promise<ImportSummary>;
     importCases: (input: NewCaseInput[]) => Promise<ImportSummary>;
     importProjects: (input: NewProjectInput[]) => Promise<ImportSummary>;
   };
@@ -188,6 +189,9 @@ export interface PrivacyFlowAPI {
     communications: (id: string) => Promise<Communication[]>;
     decisions: (id: string) => Promise<Decision[]>;
     documents: (id: string) => Promise<CaseDocument[]>;
+    related: (id: string) => Promise<DsrCase[]>;
+    link: (id: string, relatedCaseId: string, reason?: string) => Promise<CaseLink>;
+    unlink: (id: string, relatedCaseId: string) => Promise<void>;
     addNote: (id: string, content: string, category: string) => Promise<CaseNote>;
     addDocument: (id: string, input: AddDocumentInput) => Promise<CaseDocument>;
     addCommunication: (id: string, input: AddCommunicationInput) => Promise<Communication>;

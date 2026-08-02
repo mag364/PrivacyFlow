@@ -96,6 +96,15 @@ export interface DsrCase {
   intakeDates?: IntakeDates;
 }
 
+export interface CaseLink {
+  id: string;
+  caseId: string;
+  relatedCaseId: string;
+  reason?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
 export interface Task {
   id: string;
   caseId: string;

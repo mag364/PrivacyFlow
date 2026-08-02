@@ -2,6 +2,7 @@ import { addDays, subDays } from 'date-fns';
 import type {
   OrgSettings, User, DsrCase, Task, CaseNote, Communication, Decision,
   CaseDocument, StatusHistoryEntry, SlaHistoryEntry, AuditEvent, SlaInfo, Project,
+  CaseLink,
 } from '@shared/types';
 import type { CaseStatus, Priority, RiskLevel, Role } from '@shared/constants';
 import { OPEN_STATUSES } from '@shared/constants';
@@ -32,6 +33,7 @@ export interface Db {
   documents: CaseDocument[];
   statusHistory: StatusHistoryEntry[];
   slaHistory: SlaHistoryEntry[];
+  caseLinks: CaseLink[];
   audit: AuditEvent[];
   pauseStarts: Record<string, string>;
 }
@@ -183,6 +185,7 @@ export async function createSeed(settings: OrgSettings): Promise<Db> {
     documents: [],
     statusHistory: [],
     slaHistory: [],
+    caseLinks: [],
     audit: [],
     pauseStarts: {},
   };

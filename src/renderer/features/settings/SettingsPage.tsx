@@ -353,6 +353,12 @@ function UpdateSection() {
     const trimmedToken = token.trim();
 
     const { release: availableRelease, asset } = state;
+    if (updaterBridge() && /\.zip$/i.test(asset.name)) {
+      const confirmed = window.confirm(
+        'Before updating, close PrivacyFlow on every other PC using this shared application folder. Continue with the update?',
+      );
+      if (!confirmed) return;
+    }
     setState({ status: 'downloading', release: availableRelease, asset });
     try {
       const desktopUpdater = updaterBridge();
@@ -511,8 +517,8 @@ function UpdateSection() {
 
       {state.status === 'available' && (
         <p className="text-[11px] text-muted">
-          The update button downloads the folder-based Windows ZIP when available. In the desktop app it can close PrivacyFlow,
-          apply the ZIP to the selected application folder, and reopen the updated app automatically.
+          Close PrivacyFlow on every other PC before updating a shared application folder. The updater downloads the Windows ZIP,
+          waits for application files to be released, applies the update, and reopens PrivacyFlow automatically.
         </p>
       )}
       {state.status === 'downloaded' && (

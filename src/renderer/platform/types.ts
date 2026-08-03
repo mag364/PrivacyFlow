@@ -168,6 +168,7 @@ export interface PrivacyFlowAPI {
     listUsers: () => Promise<User[]>;
     login: (username: string, password: string) => Promise<LoginResult>;
     logout: () => Promise<void>;
+    touchSession: () => Promise<void>;
     createUser: (input: CreateUserInput) => Promise<CreateUserResult>;
     updateUser: (id: string, patch: UpdateUserInput) => Promise<User>;
     resetUserPassword: (id: string) => Promise<ResetUserPasswordResult>;

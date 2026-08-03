@@ -43,6 +43,10 @@ database required:
    15 seconds, and the single-writer model keeps the audit hash chain linear
    and verifiable.
 
+Authentication sessions are local to each Windows profile and workspace. Each
+PC remembers its own signed-in user until that user signs out or the configured
+inactivity timeout expires; a login on one PC never changes another PC's user.
+
 If `PRIVACYFLOW_WORKSPACE` is not set, each install keeps a private per-user
 database — suitable for solo use.
 

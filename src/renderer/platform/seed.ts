@@ -17,7 +17,6 @@ import { GENESIS_HASH, hashEvent } from '@shared/audit';
 
 export interface Db {
   settings: OrgSettings;
-  currentUserId: string | null;
   seq: number;
   projectSeq: number;
   auditSeq: number;
@@ -169,7 +168,6 @@ export async function createSeed(settings: OrgSettings): Promise<Db> {
   const now = new Date();
   const db: Db = {
     settings,
-    currentUserId: null,
     seq: 0,
     projectSeq: 0,
     auditSeq: 0,

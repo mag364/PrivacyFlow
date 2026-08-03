@@ -137,9 +137,10 @@ function Protected({ availableRelease }: { availableRelease: AvailableRelease | 
 }
 
 export function App() {
-  const { init } = useAuth();
+  const { init, user, logout } = useAuth();
   const [booted, setBooted] = React.useState(false);
   const [needsSetup, setNeedsSetup] = React.useState(false);
+  const [autoLockMinutes, setAutoLockMinutes] = React.useState<number>(APP_CONFIG.defaults.autoLockMinutes);
   const [availableRelease, setAvailableRelease] = React.useState<AvailableRelease | null>(null);
 
   React.useEffect(() => {
@@ -149,6 +150,7 @@ export function App() {
       await refreshLockState();
       const settings = await platform().system.settings();
       setNeedsSetup(!settings.setupComplete);
+      setAutoLockMinutes(settings.autoLockMinutes);
       await init();
       setBooted(true);
       if (settings.setupComplete && settings.autoRetentionCleanup) {
@@ -163,6 +165,54 @@ export function App() {
       });
     })();
   }, [init]);
+
+  React.useEffect(() => {
+    if (!user || autoLockMinutes <= 0) return undefined;
+
+    const timeoutMs = autoLockMinutes * 60_000;
+    let timer = 0;
+    let lastTouch = 0;
+    let lastActivity = Date.now();
+
+    const lock = () => {
+      void logout();
+    };
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(lock, timeoutMs);
+    };
+    const activity = () => {
+      const now = Date.now();
+      if (now - lastActivity >= timeoutMs) {
+        lock();
+        return;
+      }
+      lastActivity = now;
+      arm();
+      if (now - lastTouch >= 30_000) {
+        lastTouch = now;
+        void platform().auth.touchSession();
+      }
+    };
+    const visibilityChanged = () => {
+      if (document.visibilityState === 'visible') activity();
+    };
+
+    activity();
+    window.addEventListener('pointerdown', activity);
+    window.addEventListener('pointermove', activity);
+    window.addEventListener('keydown', activity);
+    window.addEventListener('focus', activity);
+    document.addEventListener('visibilitychange', visibilityChanged);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pointerdown', activity);
+      window.removeEventListener('pointermove', activity);
+      window.removeEventListener('keydown', activity);
+      window.removeEventListener('focus', activity);
+      document.removeEventListener('visibilitychange', visibilityChanged);
+    };
+  }, [autoLockMinutes, logout, user]);
 
   if (!booted) {
     return (

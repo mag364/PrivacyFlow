@@ -85,6 +85,18 @@ export interface WorkspaceBridge {
   choosePath?: () => Promise<ChoosePathResult | null>;
 }
 
+export interface LocalAuthSession {
+  userId: string;
+  lastActiveAt: string;
+}
+
+export interface AuthSessionBridge {
+  get: () => Promise<LocalAuthSession | null>;
+  set: (userId: string) => Promise<LocalAuthSession>;
+  touch: () => Promise<LocalAuthSession | null>;
+  clear: () => Promise<boolean>;
+}
+
 export interface UpdaterBridge {
   downloadReleaseAsset: (input: DownloadUpdateInput) => Promise<DownloadUpdateResult>;
   getApplicationFolder?: () => Promise<ApplicationFolderInfo>;
@@ -190,6 +202,7 @@ const WRITE_STATE: WorkspaceLockState = {
 interface Injected {
   isElectron?: boolean;
   workspace?: WorkspaceBridge;
+  authSession?: AuthSessionBridge;
   updater?: UpdaterBridge;
   backup?: BackupBridge;
   mail?: MailBridge;
@@ -204,6 +217,10 @@ function injected(): Injected {
 
 export function workspaceBridge(): WorkspaceBridge | null {
   return injected().workspace ?? null;
+}
+
+export function authSessionBridge(): AuthSessionBridge | null {
+  return injected().authSession ?? null;
 }
 
 export function updaterBridge(): UpdaterBridge | null {

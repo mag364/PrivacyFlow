@@ -209,6 +209,41 @@ function workspacePreferencePath(): string {
   return path.join(app.getPath('userData'), 'workspace-path.json');
 }
 
+interface StoredAuthSession {
+  userId: string;
+  lastActiveAt: string;
+}
+
+type StoredAuthSessions = Record<string, StoredAuthSession>;
+
+function authSessionsPath(): string {
+  return path.join(app.getPath('userData'), 'auth-sessions.json');
+}
+
+function authSessionKey(): string {
+  return crypto.createHash('sha256').update(path.resolve(dbPath).toLowerCase()).digest('hex');
+}
+
+function readAuthSessions(): StoredAuthSessions {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(authSessionsPath(), 'utf8')) as StoredAuthSessions;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeAuthSessions(sessions: StoredAuthSessions): void {
+  fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  writeAtomic(authSessionsPath(), JSON.stringify(sessions, null, 2));
+}
+
+function readCurrentAuthSession(): StoredAuthSession | null {
+  const session = readAuthSessions()[authSessionKey()];
+  if (!session || !session.userId || !session.lastActiveAt) return null;
+  return session;
+}
+
 function readWorkspacePreference(): string | null {
   try {
     const raw = fs.readFileSync(workspacePreferencePath(), 'utf8');
@@ -715,6 +750,37 @@ ipcMain.handle('workspace:write', async (_e, json: string) => {
   } catch {
     // Do not block the primary shared-workspace save if the local backup fails.
   }
+  return true;
+});
+
+ipcMain.handle('authSession:get', () => readCurrentAuthSession());
+
+ipcMain.handle('authSession:set', (_e, userId: string) => {
+  const cleanUserId = String(userId || '').trim();
+  if (!cleanUserId) throw new Error('A user ID is required.');
+  const sessions = readAuthSessions();
+  const session = { userId: cleanUserId, lastActiveAt: new Date().toISOString() };
+  sessions[authSessionKey()] = session;
+  writeAuthSessions(sessions);
+  return session;
+});
+
+ipcMain.handle('authSession:touch', () => {
+  const sessions = readAuthSessions();
+  const key = authSessionKey();
+  const session = sessions[key];
+  if (!session) return null;
+  session.lastActiveAt = new Date().toISOString();
+  writeAuthSessions(sessions);
+  return session;
+});
+
+ipcMain.handle('authSession:clear', () => {
+  const sessions = readAuthSessions();
+  const key = authSessionKey();
+  if (!(key in sessions)) return true;
+  delete sessions[key];
+  writeAuthSessions(sessions);
   return true;
 });
 

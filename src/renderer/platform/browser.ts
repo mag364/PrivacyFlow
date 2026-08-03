@@ -20,7 +20,10 @@ import {
   type Db, appendAudit, createSeed, nextActionFor, nextCaseNumber, nextProjectNumber,
   uid, fakeHash,
 } from './seed';
-import { workspaceBridge, isReadOnly, mailBridge, outlookBridge, graphBridge } from './workspace';
+import {
+  workspaceBridge, authSessionBridge, isReadOnly, mailBridge, outlookBridge, graphBridge,
+  type LocalAuthSession,
+} from './workspace';
 
 // -----------------------------------------------------------------------------
 // Persistence-backed implementation of PrivacyFlowAPI.
@@ -31,11 +34,57 @@ import { workspaceBridge, isReadOnly, mailBridge, outlookBridge, graphBridge } f
 //     written only while this instance holds the lock file (single writer).
 // When the lock is held by someone else the workspace opens READ-ONLY: reads
 // work everywhere (ideal for the auditor profile) and every data mutation
-// throws a clear error, which the UI surfaces. Session-only state (sign-in,
-// audit verification results) is kept in memory without persisting.
+// throws a clear error, which the UI surfaces. Sign-in state is persisted only
+// in the local Windows profile and is never serialized into the workspace.
 // -----------------------------------------------------------------------------
 
 const KEY = 'privacyflow.db.v1';
+const AUTH_SESSION_KEY = 'privacyflow.auth-session.v1';
+
+let sessionUserId: string | null = null;
+
+async function readLocalAuthSession(): Promise<LocalAuthSession | null> {
+  const bridge = authSessionBridge();
+  if (bridge) return bridge.get();
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    return raw ? JSON.parse(raw) as LocalAuthSession : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setLocalAuthSession(userId: string): Promise<void> {
+  const bridge = authSessionBridge();
+  if (bridge) {
+    await bridge.set(userId);
+    return;
+  }
+  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ userId, lastActiveAt: new Date().toISOString() }));
+}
+
+async function touchLocalAuthSession(): Promise<void> {
+  const bridge = authSessionBridge();
+  if (bridge) {
+    await bridge.touch();
+    return;
+  }
+  if (!sessionUserId) return;
+  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+    userId: sessionUserId,
+    lastActiveAt: new Date().toISOString(),
+  }));
+}
+
+async function clearLocalAuthSession(): Promise<void> {
+  sessionUserId = null;
+  const bridge = authSessionBridge();
+  if (bridge) {
+    await bridge.clear();
+    return;
+  }
+  localStorage.removeItem(AUTH_SESSION_KEY);
+}
 
 function assertWritable(): void {
   if (isReadOnly()) {
@@ -498,8 +547,6 @@ async function cleanupUsers(d: Db): Promise<void> {
   for (const doc of d.documents) if (removedIds.has(doc.uploadedBy)) doc.uploadedBy = primary.id;
   for (const dec of d.decisions) if (removedIds.has(dec.decisionMakerId)) dec.decisionMakerId = primary.id;
   for (const p of d.projects) if (removedIds.has(p.createdBy)) p.createdBy = primary.id;
-  if (d.currentUserId && removedIds.has(d.currentUserId)) d.currentUserId = primary.id;
-
   await appendAudit(d, { id: primary.id, name: primary.name, role: primary.role }, {
     category: 'User',
     action: 'users.cleaned',
@@ -623,6 +670,9 @@ function load(): Db | null {
   if (!raw) return null;
   try {
     cache = JSON.parse(raw) as Db;
+    const legacyDb = cache as Db & { currentUserId?: string | null };
+    const sessionMigrated = Object.prototype.hasOwnProperty.call(legacyDb, 'currentUserId');
+    delete legacyDb.currentUserId;
     if (!Array.isArray(cache.projects)) cache.projects = [];
     if (!Array.isArray(cache.caseLinks)) cache.caseLinks = [];
     if (typeof cache.projectSeq !== 'number') cache.projectSeq = 0;
@@ -646,7 +696,7 @@ function load(): Db | null {
     const templateMigrated = migrateRequesterFirstNameTemplates(cache);
     const requestTypeMigrated = migrateRequestTypeNames(cache);
     const projectDateMigrated = migrateProjectDates(cache);
-    const migrated = settingsMigrated || workflowMigrated || templateMigrated || requestTypeMigrated || projectDateMigrated;
+    const migrated = sessionMigrated || settingsMigrated || workflowMigrated || templateMigrated || requestTypeMigrated || projectDateMigrated;
     if (migrated && !isReadOnly()) save(cache);
     return cache;
   } catch {
@@ -690,7 +740,7 @@ async function dbClean(): Promise<Db> {
 }
 
 function actorOf(d: Db) {
-  const u = d.users.find((x) => x.id === d.currentUserId);
+  const u = d.users.find((x) => x.id === sessionUserId);
   return u ? { id: u.id, name: u.name, role: u.role } : null;
 }
 
@@ -1120,9 +1170,25 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
     auth: {
       async currentUser() {
         const d = load();
-        if (!d || !d.currentUserId) return null;
-        const u = d.users.find((x) => x.id === d.currentUserId);
-        return u ? publicUser(u) : null;
+        if (!d) return null;
+        const session = await readLocalAuthSession();
+        if (!session) {
+          sessionUserId = null;
+          return null;
+        }
+        const lastActive = Date.parse(session.lastActiveAt);
+        const timeoutMs = d.settings.autoLockMinutes * 60_000;
+        if (timeoutMs > 0 && (!Number.isFinite(lastActive) || Date.now() - lastActive >= timeoutMs)) {
+          await clearLocalAuthSession();
+          return null;
+        }
+        const u = d.users.find((x) => x.id === session.userId && x.active);
+        if (!u) {
+          await clearLocalAuthSession();
+          return null;
+        }
+        sessionUserId = u.id;
+        return publicUser(u);
       },
       async listUsers() {
         const d = await dbClean();
@@ -1135,7 +1201,8 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         if (user.mustChangePassword) {
           return { ok: false, mustChangePassword: true, user: publicUser(user) };
         }
-        d.currentUserId = user.id;
+        sessionUserId = user.id;
+        await setLocalAuthSession(user.id);
         await appendAudit(d, { id: user.id, name: user.name, role: user.role }, {
           category: 'Auth',
           action: 'auth.login',
@@ -1148,17 +1215,24 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
       },
       async logout() {
         const d = load();
-        if (!d || !d.currentUserId) return;
+        if (!d || !sessionUserId) {
+          await clearLocalAuthSession();
+          return;
+        }
         const actor = actorOf(d);
+        const userId = sessionUserId;
         await appendAudit(d, actor, {
           category: 'Auth',
           action: 'auth.logout',
           entityType: 'user',
-          entityId: d.currentUserId,
+          entityId: userId,
           summary: `${actor?.name ?? 'User'} signed out`,
         });
-        d.currentUserId = null;
+        await clearLocalAuthSession();
         save(d);
+      },
+      async touchSession() {
+        if (sessionUserId) await touchLocalAuthSession();
       },
       async createUser(input: CreateUserInput): Promise<CreateUserResult> {
         assertWritable();
@@ -1225,7 +1299,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         }
         if (patch.role) u.role = patch.role;
         if (patch.active !== undefined) u.active = patch.active;
-        if (!u.active && d.currentUserId === u.id) d.currentUserId = null;
+        if (!u.active && sessionUserId === u.id) await clearLocalAuthSession();
         const nameChange = before.name !== u.name ? `name: ${before.name} → ${u.name}; ` : '';
         await appendAudit(d, actor, {
           category: 'User',
@@ -1284,7 +1358,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         for (const c of d.cases) {
           if (c.ownerId === id) c.ownerId = undefined;
         }
-        if (d.currentUserId === id) d.currentUserId = null;
+        if (sessionUserId === id) await clearLocalAuthSession();
         await appendAudit(d, actor, {
           category: 'User',
           action: 'user.deleted',
@@ -1311,7 +1385,8 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         user.passwordHash = await hashPassword(user.username, trimmed);
         const wasForced = !!user.mustChangePassword;
         user.mustChangePassword = false;
-        d.currentUserId = user.id;
+        sessionUserId = user.id;
+        await setLocalAuthSession(user.id);
         await appendAudit(d, { id: user.id, name: user.name, role: user.role }, {
           category: 'Auth',
           action: wasForced ? 'auth.password_set' : 'auth.password_changed',

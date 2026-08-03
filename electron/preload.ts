@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('privacyflow', {
     syncNow: () => ipcRenderer.invoke('workspace:syncNow'),
     choosePath: () => ipcRenderer.invoke('workspace:choosePath'),
   },
+  authSession: {
+    get: () => ipcRenderer.invoke('authSession:get'),
+    set: (userId: string) => ipcRenderer.invoke('authSession:set', userId),
+    touch: () => ipcRenderer.invoke('authSession:touch'),
+    clear: () => ipcRenderer.invoke('authSession:clear'),
+  },
   updater: {
     downloadReleaseAsset: (input: { assetApiUrl: string; token?: string; fileName: string }) =>
       ipcRenderer.invoke('updater:downloadReleaseAsset', input),

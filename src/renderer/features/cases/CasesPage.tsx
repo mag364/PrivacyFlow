@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Search, Plus, Download, FolderKanban, CalendarDays, ChevronLeft, ChevronRight,
-  ChevronsLeft, ChevronsRight, Layers,
+  ChevronsLeft, ChevronsRight, Layers, ExternalLink,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type { CaseLink, DsrCase } from '@shared/types';
@@ -13,6 +13,10 @@ import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { requestIdForCase } from '@shared/placeholders';
 import { readLastYear, writeLastYear, clearLastYear } from '../../lib/lastYear';
 import { useAuth, can } from '../../store/auth';
+import { isWebUrl, openExternalUrl } from '../../platform/workspace';
+
+const SERVICENOW_DSR_URL = 'https://raymondjames.service-now.com/now/nav/ui/classic/params/target/com.glideapp.servicecatalog_cat_item_view.do%3Fsysparm_id%3D0153fd55db97c5145826d16c68961921';
+const WORKDAY_CASE_URL = 'https://www.myworkday.com/raymondjames/wdhelp/helpcenter/create';
 
 type StatusFilter = 'all' | 'open' | 'closed' | string;
 const PAGE_SIZE = 15;
@@ -88,7 +92,7 @@ export function CasesPage() {
     localStorage.setItem(FILTERS_KEY, JSON.stringify({ q, status, type, page }));
   }, [q, status, type, page]);
 
-  if (!cases) return <Spinner label="Loading requests…" />;
+  if (!cases) return <Spinner label="Loading DSR requests…" />;
 
   const yearCases = year
     ? cases.filter((c) => new Date(c.sla.receivedDate).getFullYear() === year)
@@ -188,7 +192,7 @@ export function CasesPage() {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
     const header = [
-      'Request ID', 'Status', 'DSRREQ #', 'Request Types', 'Intake Channel',
+      'Request ID', 'Status', 'DSRREQ #', 'ServiceNow Link', 'Request Types', 'Intake Channel',
       'Team', 'Business Unit', 'Description',
       'Requester Last Name', 'Requester Emails',
       'Relationship', 'Minor', 'Authorized Agent',
@@ -203,6 +207,7 @@ export function CasesPage() {
       c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? '',
       c.status,
       c.caseNumber,
+      c.serviceNowUrl,
       c.requestTypes.join('; '),
       c.intakeChannel,
       c.team,
@@ -238,7 +243,7 @@ export function CasesPage() {
   return (
     <div>
       <PageHeader
-        title={year ? `Requests — ${year}` : 'Requests'}
+        title={year ? `DSR Requests — ${year}` : 'DSR Requests'}
         subtitle={`${rows.length} request${rows.length === 1 ? '' : 's'} shown${year ? ` received in ${year}` : ''}${groupedCount ? ` · ${groupedCount} related group${groupedCount === 1 ? '' : 's'}` : ''}.`}
         actions={
           <>
@@ -248,6 +253,12 @@ export function CasesPage() {
               </GlassButton>
             )}
             <GlassButton onClick={exportCsv}><Download className="h-4 w-4" /> Export</GlassButton>
+            <GlassButton onClick={() => void openExternalUrl(SERVICENOW_DSR_URL)}>
+              <ExternalLink className="h-4 w-4" /> ServiceNow DSR
+            </GlassButton>
+            <GlassButton onClick={() => void openExternalUrl(WORKDAY_CASE_URL)}>
+              <ExternalLink className="h-4 w-4" /> Workday Case
+            </GlassButton>
             {can(user?.role, 'requests.create') && (
               <GlassButton variant="primary" onClick={() => navigate('/cases/new')}>
                 <Plus className="h-4 w-4" /> New request
@@ -279,7 +290,7 @@ export function CasesPage() {
       <div className="content-surface overflow-x-auto">
         {rows.length === 0 ? (
           <EmptyState
-            title={year ? `No requests in ${year}` : 'No matching requests'}
+            title={year ? `No DSR requests in ${year}` : 'No matching DSR requests'}
             description={year
               ? 'No requests were received in this year yet. New requests appear here automatically based on their received date.'
               : 'Adjust your filters or create a new request.'}
@@ -309,7 +320,18 @@ export function CasesPage() {
                     >
                       <td className="px-4 py-3 font-medium text-accent">{requestId(c)}</td>
                       <td className="px-4 py-3"><GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge></td>
-                      <td className="px-4 py-3 text-ink/90">{c.caseNumber}</td>
+                      <td className="px-4 py-3 text-ink/90">
+                        {c.serviceNowUrl && isWebUrl(c.serviceNowUrl) ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-accent hover:underline focus-ring"
+                            onClick={(event) => { event.stopPropagation(); void openExternalUrl(c.serviceNowUrl!); }}
+                            title="Open this DSRREQ in ServiceNow"
+                          >
+                            {c.caseNumber} <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
+                        ) : c.caseNumber}
+                      </td>
                       <td className="px-4 py-3 text-ink">{c.subject.lastName}</td>
                       <td className="px-4 py-3 text-muted">{c.requestTypes.join(', ')}</td>
                       <td className="px-4 py-3 text-ink/90">{fmtDate(receivedDate(c))}</td>
@@ -358,7 +380,18 @@ export function CasesPage() {
                         >
                           <td className="py-3 pl-10 pr-4 font-medium text-accent">{requestId(c)}</td>
                           <td className="px-4 py-3"><GlassBadge tone={statusTone(c.status)}>{c.status}</GlassBadge></td>
-                          <td className="px-4 py-3 text-ink/90">{c.caseNumber}</td>
+                          <td className="px-4 py-3 text-ink/90">
+                            {c.serviceNowUrl && isWebUrl(c.serviceNowUrl) ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-accent hover:underline focus-ring"
+                                onClick={(event) => { event.stopPropagation(); void openExternalUrl(c.serviceNowUrl!); }}
+                                title="Open this DSRREQ in ServiceNow"
+                              >
+                                {c.caseNumber} <ExternalLink className="h-3.5 w-3.5" />
+                              </button>
+                            ) : c.caseNumber}
+                          </td>
                           <td className="px-4 py-3 text-ink">{c.subject.lastName}</td>
                           <td className="px-4 py-3 text-muted">{c.requestTypes.join(', ')}</td>
                           <td className="px-4 py-3 text-ink/90">{fmtDate(receivedDate(c))}</td>

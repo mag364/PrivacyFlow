@@ -126,6 +126,10 @@ export interface MailBridge {
   openDraft: (input: MailDraftInput) => Promise<boolean>;
 }
 
+export interface ExternalBridge {
+  open: (url: string) => Promise<boolean>;
+}
+
 export interface M365DeviceCode {
   device_code: string;
   user_code: string;
@@ -212,6 +216,7 @@ interface Injected {
   updater?: UpdaterBridge;
   backup?: BackupBridge;
   mail?: MailBridge;
+  external?: ExternalBridge;
   graph?: M365GraphBridge;
   outlook?: OutlookBridge;
   windowControls?: WindowControlsBridge;
@@ -243,6 +248,32 @@ export function backupBridge(): BackupBridge | null {
 
 export function mailBridge(): MailBridge | null {
   return injected().mail ?? null;
+}
+
+export function externalBridge(): ExternalBridge | null {
+  return injected().external ?? null;
+}
+
+export function isWebUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export async function openExternalUrl(value: string): Promise<void> {
+  const url = new URL(value.trim());
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Enter a complete HTTP or HTTPS URL.');
+  }
+  const bridge = externalBridge();
+  if (bridge) {
+    await bridge.open(url.toString());
+    return;
+  }
+  window.open(url.toString(), '_blank', 'noopener,noreferrer');
 }
 
 export function graphBridge(): M365GraphBridge | null {

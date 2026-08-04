@@ -577,7 +577,7 @@ export function AutomationPage() {
             )}
           </div>
           <p className="mb-3 text-xs text-muted">
-            Note templates appear as insert options below the New Request description or New Project comments field based on the selected target.
+            Note templates appear as insert options below the New DSR Request description or New Data Notification comments field based on the selected target.
           </p>
 
           <div className="flex flex-col gap-2">
@@ -603,7 +603,7 @@ export function AutomationPage() {
               </div>
             ))}
             {(settings.noteTemplates ?? []).length === 0 && (
-              <p className="py-6 text-center text-sm text-muted">No note templates yet. Create one to add inserts to request descriptions or project comments.</p>
+              <p className="py-6 text-center text-sm text-muted">No note templates yet. Create one to add inserts to DSR request descriptions or data notification comments.</p>
             )}
           </div>
 
@@ -626,7 +626,7 @@ export function AutomationPage() {
                     onChange={(e) => setEditingNoteTemplate({ ...editingNoteTemplate, target: e.target.value as NoteTemplate['target'] })}
                   >
                     <option value="description">New request description</option>
-                    <option value="comments">New project comments</option>
+                    <option value="comments">New data notification comments</option>
                   </GlassSelect>
                 </Field>
               </div>

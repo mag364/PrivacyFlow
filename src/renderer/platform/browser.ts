@@ -971,6 +971,7 @@ async function addImportedCase(
   const c: DsrCase = {
     id: uid(),
     caseNumber,
+    serviceNowUrl: input.serviceNowUrl?.trim() || undefined,
     status,
     requestTypes: input.requestTypes,
     intakeChannel: input.intakeChannel,
@@ -1232,6 +1233,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
             }
             const imported = await addImportedCase(d, {
               caseNumberOverride: c.caseNumber,
+              serviceNowUrl: c.serviceNowUrl,
               requestTypes: c.requestTypes,
               intakeChannel: c.intakeChannel,
               jurisdiction: c.jurisdiction,
@@ -1554,6 +1556,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         const c: DsrCase = {
           id: uid(),
           caseNumber,
+          serviceNowUrl: input.serviceNowUrl?.trim() || undefined,
           status: 'New',
           requestTypes: input.requestTypes,
           intakeChannel: input.intakeChannel,

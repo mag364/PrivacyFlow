@@ -49,6 +49,7 @@ export interface NewCaseInput {
   businessUnit?: string;
   description: string;
   caseNumberOverride?: string;
+  serviceNowUrl?: string;
   skipCaseNumberAutoAssign?: boolean;
   ownerId?: string;
   subject: DataSubject;

@@ -13,7 +13,6 @@ import { insertTextAtCursor } from '../../lib/textInsert';
 
 const SOURCES = ['DD', 'SSDS', 'Lighthouse'];
 const INVESTMENT_CLASSES = ['CTB', 'KTLO', 'RTB', 'Not Listed'];
-const SSDS_TYPES = ['User', 'Application', 'N/A'];
 
 export function NewProjectPage() {
   const navigate = useNavigate();
@@ -26,7 +25,7 @@ export function NewProjectPage() {
   const [orgName, setOrgName] = React.useState('');
   const appliedProjectNumber = React.useRef('');
 
-  // Project Information
+  // Data Notification Information
   const [projectNumber, setProjectNumber] = React.useState('');
   const [projectName, setProjectName] = React.useState('');
   const [status, setStatus] = React.useState<string>('New');
@@ -36,17 +35,9 @@ export function NewProjectPage() {
   const [ritmNumber, setRitmNumber] = React.useState('');
   const [investmentClass, setInvestmentClass] = React.useState('CTB');
   const [description, setDescription] = React.useState('');
-
-  // Project Details
-  const [fiscalYear, setFiscalYear] = React.useState('');
   const [piaNumber, setPiaNumber] = React.useState('');
-  const [ssdsTask, setSsdsTask] = React.useState('');
-  const [ssdsType, setSsdsType] = React.useState('User');
-  const [projectUid, setProjectUid] = React.useState('');
-  const [businessUnit, setBusinessUnit] = React.useState('');
-  const [businessSponsors, setBusinessSponsors] = React.useState('');
-  const [demandNumber, setDemandNumber] = React.useState('');
-  const [assetsMentioned, setAssetsMentioned] = React.useState('');
+  const [oneTrustProjectId, setOneTrustProjectId] = React.useState('');
+  const [oneTrustUrl, setOneTrustUrl] = React.useState('');
 
   const [comments, setComments] = React.useState('');
   const commentsRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -79,20 +70,14 @@ export function NewProjectPage() {
     appliedProjectNumber.current = normalizedNumber;
 
     setProjectName(matchedProject.projectName);
-    setFiscalYear(matchedProject.fiscalYear ?? '');
     setPiaNumber(matchedProject.piaNumber ?? '');
-    setSsdsTask(matchedProject.ssdsTask ?? '');
-    setSsdsType(matchedProject.ssdsType ?? 'User');
-    setProjectUid(matchedProject.projectUid ?? '');
-    setBusinessUnit(matchedProject.businessUnit ?? '');
-    setBusinessSponsors(matchedProject.businessSponsors ?? '');
-    setDemandNumber(matchedProject.demandNumber ?? '');
-    setAssetsMentioned(matchedProject.assetsMentioned ?? '');
+    setOneTrustProjectId(matchedProject.oneTrustProjectId ?? '');
+    setOneTrustUrl(matchedProject.oneTrustUrl ?? '');
   }, [matchedProject]);
 
   if (!can(user?.role, 'projects.create')) {
     return (
-      <GlassPanel><p className="text-sm text-muted">You do not have permission to create projects.</p></GlassPanel>
+      <GlassPanel><p className="text-sm text-muted">You do not have permission to create data notifications.</p></GlassPanel>
     );
   }
 
@@ -121,15 +106,10 @@ export function NewProjectPage() {
       ritmNumber: ritmNumber.trim() || undefined,
       investmentClass,
       description,
-      fiscalYear: fiscalYear || undefined,
       piaNumber: piaNumber || undefined,
-      ssdsTask: ssdsTask || undefined,
-      ssdsType,
-      projectUid: projectUid || undefined,
-      businessUnit: businessUnit || undefined,
-      businessSponsors: businessSponsors || undefined,
-      demandNumber: demandNumber || undefined,
-      assetsMentioned: assetsMentioned || undefined,
+      oneTrustProjectId: oneTrustProjectId.trim() || undefined,
+      oneTrustUrl: oneTrustUrl.trim() || undefined,
+      ssdsType: 'N/A',
       comments: comments || undefined,
     };
     try {
@@ -138,7 +118,7 @@ export function NewProjectPage() {
       navigate(`/projects/${created.id}`);
     } catch (e) {
       setBusy(false);
-      setSubmitError(e instanceof Error ? e.message : 'Unable to create the project.');
+      setSubmitError(e instanceof Error ? e.message : 'Unable to create the data notification.');
     }
   }
 
@@ -153,15 +133,7 @@ export function NewProjectPage() {
       'project.ritmNumber': ritmNumber,
       'project.investmentClass': investmentClass,
       'project.description': description,
-      'project.fiscalYear': fiscalYear,
       'project.piaNumber': piaNumber,
-      'project.ssdsTask': ssdsTask,
-      'project.ssdsType': ssdsType,
-      'project.uid': projectUid,
-      'project.businessUnit': businessUnit,
-      'project.businessSponsors': businessSponsors,
-      'project.demandNumber': demandNumber,
-      'project.assetsMentioned': assetsMentioned,
       'project.comments': comments,
       'project.createdBy': user?.name ?? user?.username ?? '',
       'project.createdAt': '',
@@ -178,17 +150,17 @@ export function NewProjectPage() {
       <button onClick={() => navigate('/')} className="mb-3 flex items-center gap-1.5 text-sm text-muted hover:text-ink focus-ring">
         <ArrowLeft className="h-4 w-4" /> Back to dashboard
       </button>
-      <PageHeader title="New Project" subtitle="Log a new project for privacy review." />
+      <PageHeader title="New Data Notification" subtitle="Log a new data notification for privacy review." />
 
       <form onSubmit={submit} className="grid gap-4 lg:grid-cols-2">
         <GlassPanel>
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">Project Information</h3>
+          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">Data Notification Information</h3>
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Project Number" hint="Leave blank to auto-assign. May be shared by grouped entries with the same project name.">
                 <GlassInput value={projectNumber} onChange={(e) => setProjectNumber(e.target.value)} placeholder="Auto-assigned" />
               </Field>
-              <Field label="Project Name" error={errors.projectName} hint="Entries with the same name are grouped together on the Projects list.">
+              <Field label="Project Name" error={errors.projectName} hint="Entries with the same name are grouped together on the Data Notifications list.">
                 <GlassInput value={projectName} onChange={(e) => setProjectName(e.target.value)} />
               </Field>
             </div>
@@ -198,7 +170,7 @@ export function NewProjectPage() {
                   {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </GlassSelect>
               </Field>
-              <Field label="Source">
+              <Field label="Source Information">
                 <GlassSelect value={source} onChange={(e) => setSource(e.target.value)}>
                   {SOURCES.map((s) => <option key={s}>{s}</option>)}
                 </GlassSelect>
@@ -213,7 +185,7 @@ export function NewProjectPage() {
                   disabled={notificationCancelled}
                 />
               </Field>
-              <Field label="Project cancelled">
+              <Field label="Notification cancelled">
                 <label className="flex h-[38px] items-center gap-2 rounded-xl border border-line bg-[var(--pf-surface)] px-3 text-sm text-ink">
                   <input
                     type="checkbox"
@@ -221,12 +193,12 @@ export function NewProjectPage() {
                     checked={notificationCancelled}
                     onChange={(e) => setNotificationCancelled(e.target.checked)}
                   />
-                  Project cancelled
+                  Notification cancelled
                 </label>
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="RITM Number" hint="Must be unique — this is the project's identifier. Duplicate RITM numbers are rejected.">
+              <Field label="RITM Number" hint="Must be unique for each data notification. Duplicate RITM numbers are rejected.">
                 <GlassInput value={ritmNumber} onChange={(e) => setRitmNumber(e.target.value)} />
               </Field>
               <Field label="Investment Class">
@@ -235,63 +207,29 @@ export function NewProjectPage() {
                 </GlassSelect>
               </Field>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="PIA Number">
+                <GlassInput value={piaNumber} onChange={(e) => setPiaNumber(e.target.value)} />
+              </Field>
+              <Field label="OneTrust Project ID">
+                <GlassInput value={oneTrustProjectId} onChange={(e) => setOneTrustProjectId(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="OneTrust Link" hint="Optional full URL for this OneTrust project.">
+              <GlassInput
+                type="url"
+                value={oneTrustUrl}
+                onChange={(e) => setOneTrustUrl(e.target.value)}
+                placeholder="https://...onetrust.com/..."
+              />
+            </Field>
             <Field label="Request Description/Explanation" error={errors.description}>
-              <GlassTextarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Summarise the project request…" />
+              <GlassTextarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Summarise the data notification…" />
             </Field>
           </div>
         </GlassPanel>
 
         <GlassPanel>
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Project Details</h3>
-            {matchedProject && (
-              <span className="rounded-capsule border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-200">
-                Matched {matchedProject.projectNumber}; details populated
-              </span>
-            )}
-          </div>
-          <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Fiscal Year">
-                <GlassInput value={fiscalYear} onChange={(e) => setFiscalYear(e.target.value)} placeholder="e.g. FY26" />
-              </Field>
-              <Field label="PIA Number">
-                <GlassInput value={piaNumber} onChange={(e) => setPiaNumber(e.target.value)} />
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="SSDS Task">
-                <GlassInput value={ssdsTask} onChange={(e) => setSsdsTask(e.target.value)} />
-              </Field>
-              <Field label="SSDS Type">
-                <GlassSelect value={ssdsType} onChange={(e) => setSsdsType(e.target.value)}>
-                  {SSDS_TYPES.map((t) => <option key={t}>{t}</option>)}
-                </GlassSelect>
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Project UID">
-                <GlassInput value={projectUid} onChange={(e) => setProjectUid(e.target.value)} />
-              </Field>
-              <Field label="Business Unit">
-                <GlassInput value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} />
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Business Sponsors">
-                <GlassInput value={businessSponsors} onChange={(e) => setBusinessSponsors(e.target.value)} />
-              </Field>
-              <Field label="Demand Number">
-                <GlassInput value={demandNumber} onChange={(e) => setDemandNumber(e.target.value)} />
-              </Field>
-            </div>
-            <Field label="Assets Mentioned">
-              <GlassInput value={assetsMentioned} onChange={(e) => setAssetsMentioned(e.target.value)} />
-            </Field>
-          </div>
-        </GlassPanel>
-
-        <GlassPanel className="lg:col-span-2">
           <Field label="Comments">
             <GlassTextarea
               ref={commentsRef}
@@ -320,7 +258,7 @@ export function NewProjectPage() {
           {submitError && <p className="mt-3 text-xs text-red-400">{submitError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <GlassButton type="button" onClick={() => navigate('/')}>Cancel</GlassButton>
-            <GlassButton type="submit" variant="primary" loading={busy}>Create project</GlassButton>
+            <GlassButton type="submit" variant="primary" loading={busy}>Create data notification</GlassButton>
           </div>
         </GlassPanel>
       </form>

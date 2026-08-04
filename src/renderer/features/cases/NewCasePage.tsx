@@ -25,6 +25,7 @@ export function NewCasePage() {
 
   const [requestId, setRequestId] = React.useState('');
   const [dsrreqNumber, setDsrreqNumber] = React.useState('');
+  const [serviceNowUrl, setServiceNowUrl] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [clientCenterStatus, setClientCenterStatus] = React.useState<string>('Not located');
@@ -115,6 +116,7 @@ export function NewCasePage() {
     const input: NewCaseInput = {
       requestTypes,
       caseNumberOverride: dsrreqNumber.trim() || undefined,
+      serviceNowUrl: serviceNowUrl.trim() || undefined,
       skipCaseNumberAutoAssign: !dsrreqNumber.trim(),
       intakeChannel,
       jurisdiction: 'US',
@@ -313,6 +315,14 @@ export function NewCasePage() {
                 />
               </Field>
             </div>
+            <Field label="ServiceNow Link" hint="Optional full URL for this DSRREQ record.">
+              <GlassInput
+                type="url"
+                value={serviceNowUrl}
+                onChange={(e) => setServiceNowUrl(e.target.value)}
+                placeholder="https://raymondjames.service-now.com/..."
+              />
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Date Client Svcs. Rec'd Email">
                 <GlassInput type="date" value={dateCsReceived} onChange={(e) => setDateCsReceived(e.target.value)} />

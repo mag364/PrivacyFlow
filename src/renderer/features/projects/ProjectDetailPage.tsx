@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import clsx from 'clsx';
 import {
   ArrowLeft, ClipboardList, MessageSquare, ShieldCheck, Paperclip,
-  Pencil, Check, X, Save,
+  Pencil, Check, X, Save, ExternalLink,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type { Project, AuditEvent, Communication, NoteTemplate } from '@shared/types';
@@ -16,6 +16,7 @@ import {
 import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { useAuth, can } from '../../store/auth';
 import { insertTextAtCursor } from '../../lib/textInsert';
+import { isWebUrl, openExternalUrl } from '../../platform/workspace';
 
 type TabKey = 'overview' | 'communications' | 'comments' | 'audit';
 
@@ -28,7 +29,6 @@ const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?
 
 const SOURCES = ['DD', 'SSDS', 'Lighthouse'];
 const INVESTMENT_CLASSES = ['CTB', 'KTLO', 'RTB', 'Not Listed'];
-const SSDS_TYPES = ['User', 'Application', 'N/A'];
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams();
@@ -88,13 +88,13 @@ export function ProjectDetailPage() {
       .catch(() => setCommentTemplates([]));
   }, []);
 
-  if (project === undefined) return <Spinner label="Loading project…" />;
+  if (project === undefined) return <Spinner label="Loading data notification…" />;
   if (project === null) {
     return (
       <GlassPanel>
-        <EmptyState title="Project not found" description="This project may have been removed." />
+        <EmptyState title="Data notification not found" description="This data notification may have been removed." />
         <div className="mt-4 flex justify-center">
-          <GlassButton onClick={() => navigate('/tasks')}>Back to projects</GlassButton>
+          <GlassButton onClick={() => navigate('/tasks')}>Back to data notifications</GlassButton>
         </div>
       </GlassPanel>
     );
@@ -113,6 +113,7 @@ export function ProjectDetailPage() {
     if (!draft) return;
     if (!draft.projectName.trim()) { setSaveError('Project Name is required.'); return; }
     if (!draft.description.trim()) { setSaveError('Description is required.'); return; }
+    if (draft.oneTrustUrl?.trim() && !isWebUrl(draft.oneTrustUrl)) { setSaveError('OneTrust Link must be a complete HTTP or HTTPS URL.'); return; }
     setSaveBusy(true);
     setSaveError('');
     try {
@@ -125,15 +126,9 @@ export function ProjectDetailPage() {
         ritmNumber: draft.ritmNumber || undefined,
         investmentClass: draft.investmentClass,
         description: draft.description,
-        fiscalYear: draft.fiscalYear || undefined,
         piaNumber: draft.piaNumber || undefined,
-        ssdsTask: draft.ssdsTask || undefined,
-        ssdsType: draft.ssdsType,
-        projectUid: draft.projectUid || undefined,
-        businessUnit: draft.businessUnit || undefined,
-        businessSponsors: draft.businessSponsors || undefined,
-        demandNumber: draft.demandNumber || undefined,
-        assetsMentioned: draft.assetsMentioned || undefined,
+        oneTrustProjectId: draft.oneTrustProjectId?.trim() || undefined,
+        oneTrustUrl: draft.oneTrustUrl?.trim() || undefined,
         comments: draft.comments ?? undefined,
       });
       setEditing(false);
@@ -214,11 +209,12 @@ export function ProjectDetailPage() {
   return (
     <div>
       <button onClick={() => navigate('/tasks')} className="mb-3 flex items-center gap-1.5 text-sm text-muted hover:text-ink focus-ring">
-        <ArrowLeft className="h-4 w-4" /> Back to projects
+        <ArrowLeft className="h-4 w-4" /> Back to data notifications
       </button>
 
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Data Notification Details</p>
           {editingNumber ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
@@ -312,36 +308,35 @@ export function ProjectDetailPage() {
                   </GlassPanel>
 
                   <GlassPanel>
-                    <h3 className="mb-3 text-sm font-semibold text-ink">Project Information</h3>
-                    <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                    <h3 className="mb-3 text-sm font-semibold text-ink">Data Notification Information</h3>
+                    <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
                       <Row k="Status" v={p.status} />
                       <Row k="Project Name" v={p.projectName} />
-                      <Row k="Source" v={p.source} />
+                      <Row k="Source Information" v={p.source} />
                       <Row k="Date Notification Rec'd" v={p.notificationCancelled ? 'Cancelled' : fmtDate(p.dateNotificationReceived)} />
                       <Row k="RITM Number" v={p.ritmNumber ?? '—'} />
                       <Row k="Investment Class" v={p.investmentClass} />
-                    </dl>
-                  </GlassPanel>
-
-                  <GlassPanel>
-                    <h3 className="mb-3 text-sm font-semibold text-ink">Project Details</h3>
-                    <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                      <Row k="Fiscal Year" v={p.fiscalYear ?? '—'} />
                       <Row k="PIA Number" v={p.piaNumber ?? '—'} />
-                      <Row k="SSDS Task" v={p.ssdsTask ?? '—'} />
-                      <Row k="SSDS Type" v={p.ssdsType} />
-                      <Row k="Project UID" v={p.projectUid ?? '—'} />
-                      <Row k="Business Unit" v={p.businessUnit ?? '—'} />
-                      <Row k="Business Sponsors" v={p.businessSponsors ?? '—'} />
-                      <Row k="Demand Number" v={p.demandNumber ?? '—'} />
-                      <Row k="Assets Mentioned" v={p.assetsMentioned ?? '—'} />
+                      <Row
+                        k="OneTrust Project ID"
+                        v={p.oneTrustProjectId && p.oneTrustUrl && isWebUrl(p.oneTrustUrl) ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-accent hover:underline focus-ring"
+                            onClick={() => void openExternalUrl(p.oneTrustUrl!)}
+                            title="Open this project in OneTrust"
+                          >
+                            {p.oneTrustProjectId} <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (p.oneTrustProjectId ?? '—')}
+                      />
                     </dl>
                   </GlassPanel>
                 </>
               ) : draft && (
                 <>
                   <GlassPanel>
-                    <h3 className="mb-3 text-sm font-semibold text-ink">Project Information</h3>
+                    <h3 className="mb-3 text-sm font-semibold text-ink">Data Notification Information</h3>
                     <div className="flex flex-col gap-3">
                       <div className="grid grid-cols-2 gap-3">
                         <Field label="Project Name">
@@ -354,7 +349,7 @@ export function ProjectDetailPage() {
                         </Field>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <Field label="Source">
+                        <Field label="Source Information">
                           <GlassSelect value={draft.source} onChange={(e) => setD({ source: e.target.value })}>
                             {SOURCES.map((s) => <option key={s}>{s}</option>)}
                           </GlassSelect>
@@ -378,7 +373,23 @@ export function ProjectDetailPage() {
                           </GlassSelect>
                         </Field>
                       </div>
-                      <Field label="Project cancelled">
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="PIA Number">
+                          <GlassInput value={draft.piaNumber ?? ''} onChange={(e) => setD({ piaNumber: e.target.value || undefined })} />
+                        </Field>
+                        <Field label="OneTrust Project ID">
+                          <GlassInput value={draft.oneTrustProjectId ?? ''} onChange={(e) => setD({ oneTrustProjectId: e.target.value || undefined })} />
+                        </Field>
+                      </div>
+                      <Field label="OneTrust Link" hint="Optional full URL for this OneTrust project.">
+                        <GlassInput
+                          type="url"
+                          value={draft.oneTrustUrl ?? ''}
+                          onChange={(e) => setD({ oneTrustUrl: e.target.value || undefined })}
+                          placeholder="https://...onetrust.com/..."
+                        />
+                      </Field>
+                      <Field label="Notification cancelled">
                         <label className="flex h-[38px] items-center gap-2 rounded-xl border border-line bg-[var(--pf-surface)] px-3 text-sm text-ink">
                           <input
                             type="checkbox"
@@ -386,7 +397,7 @@ export function ProjectDetailPage() {
                             checked={draft.notificationCancelled}
                             onChange={(e) => setD({ notificationCancelled: e.target.checked })}
                           />
-                          Project cancelled
+                          Notification cancelled
                         </label>
                       </Field>
                       <Field label="Request Description/Explanation">
@@ -396,45 +407,8 @@ export function ProjectDetailPage() {
                   </GlassPanel>
 
                   <GlassPanel>
-                    <h3 className="mb-3 text-sm font-semibold text-ink">Project Details</h3>
+                    <h3 className="mb-3 text-sm font-semibold text-ink">Comments</h3>
                     <div className="flex flex-col gap-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Fiscal Year">
-                          <GlassInput value={draft.fiscalYear ?? ''} onChange={(e) => setD({ fiscalYear: e.target.value || undefined })} />
-                        </Field>
-                        <Field label="PIA Number">
-                          <GlassInput value={draft.piaNumber ?? ''} onChange={(e) => setD({ piaNumber: e.target.value || undefined })} />
-                        </Field>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="SSDS Task">
-                          <GlassInput value={draft.ssdsTask ?? ''} onChange={(e) => setD({ ssdsTask: e.target.value || undefined })} />
-                        </Field>
-                        <Field label="SSDS Type">
-                          <GlassSelect value={draft.ssdsType} onChange={(e) => setD({ ssdsType: e.target.value })}>
-                            {SSDS_TYPES.map((t) => <option key={t}>{t}</option>)}
-                          </GlassSelect>
-                        </Field>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Project UID">
-                          <GlassInput value={draft.projectUid ?? ''} onChange={(e) => setD({ projectUid: e.target.value || undefined })} />
-                        </Field>
-                        <Field label="Business Unit">
-                          <GlassInput value={draft.businessUnit ?? ''} onChange={(e) => setD({ businessUnit: e.target.value || undefined })} />
-                        </Field>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Business Sponsors">
-                          <GlassInput value={draft.businessSponsors ?? ''} onChange={(e) => setD({ businessSponsors: e.target.value || undefined })} />
-                        </Field>
-                        <Field label="Demand Number">
-                          <GlassInput value={draft.demandNumber ?? ''} onChange={(e) => setD({ demandNumber: e.target.value || undefined })} />
-                        </Field>
-                      </div>
-                      <Field label="Assets Mentioned">
-                        <GlassInput value={draft.assetsMentioned ?? ''} onChange={(e) => setD({ assetsMentioned: e.target.value || undefined })} />
-                      </Field>
                       <Field label="Comments">
                         <GlassTextarea
                           ref={commentsRef}
@@ -532,7 +506,7 @@ export function ProjectDetailPage() {
               ) : (
                 <EmptyState
                   title="No comments"
-                  description="Comments added when the project was logged will appear here. Edit the project on the Overview tab to add one."
+                  description="Comments added when the data notification was logged will appear here. Edit the record on the Overview tab to add one."
                   icon={<MessageSquare className="h-6 w-6" />}
                 />
               )}
@@ -595,9 +569,7 @@ export function ProjectDetailPage() {
             </GlassPanel>
           ) : (
             <GlassPanel>
-              <p className="text-xs text-muted">
-                You have read-only access to this project.
-              </p>
+              <p className="text-xs text-muted">You have read-only access to this data notification.</p>
             </GlassPanel>
           )}
         </div>
@@ -606,7 +578,7 @@ export function ProjectDetailPage() {
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="text-muted">{k}</dt>

@@ -71,6 +71,7 @@ export interface SlaInfo {
 export interface DsrCase {
   id: string;
   caseNumber: string;
+  serviceNowUrl?: string;
   status: CaseStatus;
   requestTypes: (RequestType | string)[];
   intakeChannel: IntakeChannel | string;
@@ -134,6 +135,8 @@ export interface Project {
   description: string;
   fiscalYear?: string;
   piaNumber?: string;
+  oneTrustProjectId?: string;
+  oneTrustUrl?: string;
   ssdsTask?: string;
   ssdsType: 'User' | 'Application' | 'N/A' | string;
   projectUid?: string;

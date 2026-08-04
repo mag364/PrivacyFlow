@@ -69,12 +69,12 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Operational overview of your data subject requests."
+        subtitle="Operational overview of your DSR requests and data notifications."
         actions={
           can(user?.role, 'requests.create') && (
             <>
               <GlassButton onClick={() => navigate('/projects/new')}>
-                <FolderPlus className="h-4 w-4" /> Add Project
+                <FolderPlus className="h-4 w-4" /> Add Data Notification
               </GlassButton>
               <GlassButton variant="primary" onClick={() => navigate('/cases/new')}>
                 <Plus className="h-4 w-4" /> New request
@@ -85,24 +85,24 @@ export function DashboardPage() {
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Metric icon={<FolderOpen className="h-4 w-4" />} label="Open requests" value={metrics.openCases} tone="info" />
+        <Metric icon={<FolderOpen className="h-4 w-4" />} label="Open DSR requests" value={metrics.openCases} tone="info" />
         <Metric icon={<Trash2 className="h-4 w-4" />} label="Deletions" value={metrics.deletionCount} tone="danger" />
         <Metric icon={<BellOff className="h-4 w-4" />} label="Unsubscribe" value={metrics.unsubscribeCount} tone="warn" />
         <Metric icon={<Ban className="h-4 w-4" />} label="Do Not Sell" value={metrics.doNotSaleCount} tone="danger" />
-        <Metric icon={<FolderPlus className="h-4 w-4" />} label="Total projects" value={metrics.totalProjects} tone="info" />
-        <Metric icon={<ClipboardList className="h-4 w-4" />} label="Active projects" value={metrics.activeProjects} tone="warn" />
-        <Metric icon={<Inbox className="h-4 w-4" />} label="Projects this month" value={metrics.projectsThisMonth} tone="info" />
-        <Metric icon={<CheckCircle2 className="h-4 w-4" />} label="Closed projects this month" value={metrics.closedProjectsThisMonth} tone="success" />
+        <Metric icon={<FolderPlus className="h-4 w-4" />} label="Total data notifications" value={metrics.totalProjects} tone="info" />
+        <Metric icon={<ClipboardList className="h-4 w-4" />} label="Active data notifications" value={metrics.activeProjects} tone="warn" />
+        <Metric icon={<Inbox className="h-4 w-4" />} label="Data notifications this month" value={metrics.projectsThisMonth} tone="info" />
+        <Metric icon={<CheckCircle2 className="h-4 w-4" />} label="Closed data notifications this month" value={metrics.closedProjectsThisMonth} tone="success" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <GlassPanel>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">Recent Request</h3>
-            <button className="text-xs text-accent focus-ring" onClick={() => navigate('/cases')}>View all requests</button>
+            <h3 className="text-sm font-semibold text-ink">Recent DSR Request</h3>
+            <button className="text-xs text-accent focus-ring" onClick={() => navigate('/cases')}>View all DSR requests</button>
           </div>
           {recent.length === 0 ? (
-            <EmptyState title="No requests yet" description="Logged requests will appear here." icon={<Inbox className="h-6 w-6" />} />
+            <EmptyState title="No DSR requests yet" description="Logged DSR requests will appear here." icon={<Inbox className="h-6 w-6" />} />
           ) : (
             <div className="flex max-h-[242px] flex-col gap-2 overflow-y-auto pr-1">
               {recent.map((c) => (
@@ -126,11 +126,11 @@ export function DashboardPage() {
 
         <GlassPanel>
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">Recent Project</h3>
-            <button className="text-xs text-accent focus-ring" onClick={() => navigate('/tasks')}>View all projects</button>
+            <h3 className="text-sm font-semibold text-ink">Recent Data Notification</h3>
+            <button className="text-xs text-accent focus-ring" onClick={() => navigate('/tasks')}>View all data notifications</button>
           </div>
           {recentProjects.length === 0 ? (
-            <EmptyState title="No projects yet" description="Logged projects will appear here." icon={<FolderPlus className="h-6 w-6" />} />
+            <EmptyState title="No data notifications yet" description="Logged data notifications will appear here." icon={<FolderPlus className="h-6 w-6" />} />
           ) : (
             <div className="flex max-h-[242px] flex-col gap-2 overflow-y-auto pr-1">
               {recentProjects.map((p) => (

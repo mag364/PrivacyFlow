@@ -94,7 +94,7 @@ export function TasksPage() {
     localStorage.setItem(FILTERS_KEY, JSON.stringify({ q, source, statusFilter, sort, page }));
   }, [q, source, statusFilter, sort, page]);
 
-  if (!projects) return <Spinner label="Loading projects…" />;
+  if (!projects) return <Spinner label="Loading data notifications…" />;
 
   const yearOf = (p: Project) => saneYear(p.dateNotificationReceived) ?? saneYear(p.createdAt);
 
@@ -104,7 +104,7 @@ export function TasksPage() {
     if (source !== 'all' && p.source !== source) return false;
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
     if (q) {
-      const hay = `${p.projectNumber} ${p.projectName} ${p.ritmNumber ?? ''} ${p.businessUnit ?? ''}`.toLowerCase();
+      const hay = `${p.projectNumber} ${p.projectName} ${p.ritmNumber ?? ''} ${p.oneTrustProjectId ?? ''} ${p.businessUnit ?? ''}`.toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
@@ -195,8 +195,10 @@ export function TasksPage() {
       p.description,
       p.fiscalYear ?? '',
       p.piaNumber ?? '',
+      p.oneTrustProjectId ?? '',
+      p.oneTrustUrl ?? '',
       p.ssdsTask ?? '',
-      p.ssdsType,
+      p.ssdsType ?? '',
       p.projectUid ?? '',
       p.businessUnit ?? '',
       p.businessSponsors ?? '',
@@ -210,9 +212,9 @@ export function TasksPage() {
 
   function exportXlsx() {
     const header = [
-      'Parent Project', 'Project Number', 'Project Name', 'Status', 'Source', "Date Notification Rec'd", 'Notification Cancelled',
+      'Parent Project', 'Project Number', 'Project Name', 'Status', 'Source Information', "Date Notification Rec'd", 'Notification Cancelled',
       'RITM Number', 'Investment Class', 'Request Description/Explanation',
-      'Fiscal Year', 'PIA Number', 'SSDS Task', 'SSDS Type', 'Project UID',
+      'Fiscal Year', 'PIA Number', 'OneTrust Project ID', 'OneTrust Link', 'SSDS Task', 'SSDS Type', 'Project UID',
       'Business Unit', 'Business Sponsors', 'Demand Number', 'Assets Mentioned',
       'Comments', 'Created By', 'Created At',
     ];
@@ -233,7 +235,7 @@ export function TasksPage() {
           parentSources(g).join(', '),
           parentDate(g),
           '',
-          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
         ],
         outlineLevel: 0,
       });
@@ -247,8 +249,8 @@ export function TasksPage() {
     }
 
     downloadXlsx(
-      year ? `privacyflow-projects-${year}.xlsx` : 'privacyflow-projects.xlsx',
-      [{ name: 'Projects', rows }],
+      year ? `privacyflow-data-notifications-${year}.xlsx` : 'privacyflow-data-notifications.xlsx',
+      [{ name: 'Data Notifications', rows }],
     );
   }
 
@@ -266,8 +268,8 @@ export function TasksPage() {
   return (
     <div>
       <PageHeader
-        title={year ? `Projects — ${year}` : 'Projects'}
-        subtitle={`${visible.length} project${visible.length === 1 ? '' : 's'} shown${year ? ` from ${year}` : ''}${groupedCount ? ` · ${groupedCount} grouped by name` : ''}.`}
+        title={year ? `Data Notifications — ${year}` : 'Data Notifications'}
+        subtitle={`${visible.length} data notification${visible.length === 1 ? '' : 's'} shown${year ? ` from ${year}` : ''}${groupedCount ? ` · ${groupedCount} grouped by name` : ''}.`}
         actions={
           <>
             {year && (
@@ -278,7 +280,7 @@ export function TasksPage() {
             <GlassButton onClick={exportXlsx}><Download className="h-4 w-4" /> Export</GlassButton>
             {can(user?.role, 'projects.create') && (
               <GlassButton variant="primary" onClick={() => navigate('/projects/new')}>
-                <FolderPlus className="h-4 w-4" /> Add Project
+                <FolderPlus className="h-4 w-4" /> Add Data Notification
               </GlassButton>
             )}
           </>
@@ -288,7 +290,7 @@ export function TasksPage() {
       <div className="mb-4 flex flex-col gap-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <GlassInput className="pl-9" placeholder="Search project number, name, RITM…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <GlassInput className="pl-9" placeholder="Search project number, name, RITM, OneTrust ID…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div className="grid grid-cols-3 gap-3">
           <GlassSelect value={source} onChange={(e) => setSource(e.target.value)}>
@@ -310,10 +312,10 @@ export function TasksPage() {
       <div className="content-surface overflow-x-auto">
         {visible.length === 0 ? (
           <EmptyState
-            title={year ? `No projects in ${year}` : 'No matching projects'}
+            title={year ? `No data notifications in ${year}` : 'No matching data notifications'}
             description={year
-              ? 'No projects were notified in this year yet. New projects appear here automatically based on their notification date.'
-              : 'Adjust your filters, or add a project with the Add Project button.'}
+              ? 'No data notifications were received in this year yet. New entries appear here automatically based on their notification date.'
+              : 'Adjust your filters, or add a data notification.'}
             icon={year ? <CalendarDays className="h-6 w-6" /> : <ListChecks className="h-6 w-6" />}
           />
         ) : (
@@ -324,7 +326,7 @@ export function TasksPage() {
                 <th className="px-4 py-3">Project Name</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">RITM Number</th>
-                <th className="px-4 py-3">Source</th>
+                <th className="px-4 py-3">Source Information</th>
                 <th className="px-4 py-3">Date Notification Rec'd</th>
               </tr>
             </thead>
@@ -440,7 +442,7 @@ export function TasksPage() {
       )}
 
       <p className="mt-3 text-xs text-muted">
-        Projects sharing the same name are grouped under a collapsed parent row — click it to
+        Data notifications sharing the same project name are grouped under a collapsed parent row — click it to
         expand its entries. The Excel export preserves this structure with native collapsible
         row groups (and groups you've collapsed here export collapsed too).
       </p>

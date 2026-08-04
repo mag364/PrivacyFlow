@@ -1054,6 +1054,15 @@ ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; subject?: stri
   return shell.openExternal(url);
 });
 
+ipcMain.handle('external:open', async (_e, value: string) => {
+  const url = new URL(String(value || '').trim());
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS links can be opened.');
+  }
+  await shell.openExternal(url.toString());
+  return true;
+});
+
 const GRAPH_SCOPES = ['openid', 'profile', 'User.Read', 'Mail.Send', 'offline_access'];
 
 function formBody(values: Record<string, string>): URLSearchParams {

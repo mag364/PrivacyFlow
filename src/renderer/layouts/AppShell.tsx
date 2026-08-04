@@ -584,7 +584,7 @@ export function AppShell({
 
           {can(role, 'requests.view') && (
             <YearAccordion
-              label="Requests"
+              label="DSR Requests"
               icon={FolderKanban}
               basePath="/cases"
               extraYearsKey={EXTRA_REQUEST_YEARS_KEY}
@@ -594,7 +594,7 @@ export function AppShell({
 
           {can(role, 'projects.view') && (
             <YearAccordion
-              label="Projects"
+              label="Data Notifications"
               icon={ListChecks}
               basePath="/tasks"
               extraYearsKey={EXTRA_PROJECT_YEARS_KEY}

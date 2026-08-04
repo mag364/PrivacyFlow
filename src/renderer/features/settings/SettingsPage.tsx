@@ -194,8 +194,8 @@ function StorageSection({ info }: { info: WorkspaceInfo | null }) {
   const tone = pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-emerald-400';
 
   const counts: [string, number][] = [
-    ['Requests', stats.cases],
-    ['Projects', stats.projects],
+    ['DSR Requests', stats.cases],
+    ['Data Notifications', stats.projects],
     ['Audit events', stats.audit],
     ['Users', stats.users],
   ];
@@ -790,10 +790,10 @@ function ImportExportTab() {
       const rows = await rowsFromFile(file);
       const inputs = rows.map((row) => caseInputFromRow(row, { jurisdiction: 'US' }));
       const summary = await platform().system.importCases(inputs);
-      setResult(`Request import complete: ${summaryText(summary)}.`);
+      setResult(`DSR Request import complete: ${summaryText(summary)}.`);
       if (summary.errors.length) setError(summary.errors.slice(0, 5).join('\n'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to import requests.');
+      setError(e instanceof Error ? e.message : 'Unable to import DSR requests.');
     } finally {
       setBusy('');
       if (requestRef.current) requestRef.current.value = '';
@@ -808,10 +808,10 @@ function ImportExportTab() {
       const rows = await rowsFromFile(file);
       const inputs = rows.map(projectInputFromRow);
       const summary = await platform().system.importProjects(inputs);
-      setResult(`Project import complete: ${summaryText(summary)}.`);
+      setResult(`Data Notification import complete: ${summaryText(summary)}.`);
       if (summary.errors.length) setError(summary.errors.slice(0, 5).join('\n'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to import projects.');
+      setError(e instanceof Error ? e.message : 'Unable to import data notifications.');
     } finally {
       setBusy('');
       if (projectRef.current) projectRef.current.value = '';
@@ -846,7 +846,7 @@ function ImportExportTab() {
         <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
           <div className="mb-3 flex items-center gap-2">
             <Database className="h-4 w-4 text-accent" />
-            <p className="text-sm font-semibold text-ink">Requests</p>
+            <p className="text-sm font-semibold text-ink">DSR Requests</p>
           </div>
           <p className="mb-3 text-xs text-muted">
             Import Smartsheet or Excel exports as CSV, TSV, or .xlsx. Recognized columns include Request, Request ID, Subject, Email, Types, Status, Date Received, and Description.
@@ -859,17 +859,17 @@ function ImportExportTab() {
             onChange={(e) => { const file = e.target.files?.[0]; if (file) void importRequests(file); }}
           />
           <GlassButton disabled={!editable || !!busy} loading={busy === 'requests'} onClick={() => requestRef.current?.click()}>
-            <Upload className="h-4 w-4" /> Import requests
+            <Upload className="h-4 w-4" /> Import DSR requests
           </GlassButton>
         </div>
 
         <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
           <div className="mb-3 flex items-center gap-2">
             <FolderOpen className="h-4 w-4 text-accent" />
-            <p className="text-sm font-semibold text-ink">Projects</p>
+            <p className="text-sm font-semibold text-ink">Data Notifications</p>
           </div>
           <p className="mb-3 text-xs text-muted">
-            Import project trackers from CSV, TSV, or .xlsx. Recognized columns include Project Number, Project Name, Status, Source, RITM Number, Investment Class, Fiscal Year, PIA Number, and Description.
+            Import data notification trackers from CSV, TSV, or .xlsx. Recognized columns include Project Number, Project Name, Status, Source Information, RITM Number, Investment Class, PIA Number, OneTrust Project ID, OneTrust Link, and Description.
           </p>
           <input
             ref={projectRef}
@@ -879,7 +879,7 @@ function ImportExportTab() {
             onChange={(e) => { const file = e.target.files?.[0]; if (file) void importProjects(file); }}
           />
           <GlassButton disabled={!editable || !!busy} loading={busy === 'projects'} onClick={() => projectRef.current?.click()}>
-            <Upload className="h-4 w-4" /> Import projects
+            <Upload className="h-4 w-4" /> Import data notifications
           </GlassButton>
         </div>
 
@@ -889,7 +889,7 @@ function ImportExportTab() {
             <p className="text-sm font-semibold text-ink">PrivacyFlow transfer</p>
           </div>
           <p className="mb-3 text-xs text-muted">
-            Export requests and projects to a PrivacyFlow JSON transfer file, or import a transfer/privacyflow.db.json file from another PrivacyFlow workspace.
+            Export DSR requests and data notifications to a PrivacyFlow JSON transfer file, or import a transfer/privacyflow.db.json file from another PrivacyFlow workspace.
           </p>
           <input
             ref={privacyRef}

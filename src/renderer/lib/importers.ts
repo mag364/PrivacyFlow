@@ -169,7 +169,7 @@ export async function parseXlsx(file: File): Promise<TableRow[]> {
     const workbook = new DOMParser().parseFromString(workbookXml, 'application/xml');
     const rels = new DOMParser().parseFromString(relsXml, 'application/xml');
     const sheets = Array.from(workbook.querySelectorAll('sheet'));
-    const preferred = sheets.find((s) => /requests|projects/i.test(s.getAttribute('name') ?? '')) ?? sheets[0];
+    const preferred = sheets.find((s) => /requests|projects|data notifications/i.test(s.getAttribute('name') ?? '')) ?? sheets[0];
     const rid = preferred?.getAttribute('r:id');
     const target = rid ? Array.from(rels.querySelectorAll('Relationship')).find((r) => r.getAttribute('Id') === rid)?.getAttribute('Target') : null;
     if (target) sheetName = `xl/${target.replace(/^\/?xl\//, '')}`;
@@ -244,6 +244,7 @@ export function caseInputFromRow(row: TableRow, defaults: { jurisdiction: string
   const followUpEmailSent = normalizeImportedDate(pick(row, ['Follow-up sent', 'Follow-up Email Sent']));
   return {
     caseNumberOverride: pick(row, ['Request', 'Case Number', 'CaseNumber']) || undefined,
+    serviceNowUrl: pick(row, ['ServiceNow Link', 'ServiceNow URL', 'DSRREQ Link']) || undefined,
     requestTypes: requestTypes.length ? requestTypes : ['Access'],
     intakeChannel: pick(row, ['Intake Channel', 'Channel', 'Source']) || 'Email',
     jurisdiction: defaults.jurisdiction || 'Other',
@@ -279,7 +280,7 @@ export function projectInputFromRow(row: TableRow): NewProjectInput {
     projectNumber: pick(row, ['Project Number', 'Project']) || undefined,
     projectName: pick(row, ['Project Name', 'Name', 'Parent Project']) || 'Imported project',
     status: pick(row, ['Status']) || 'New',
-    source: pick(row, ['Source']) || 'DD',
+    source: pick(row, ['Source Information', 'Source']) || 'DD',
     dateNotificationReceived: notificationDate,
     notificationCancelled: /^true|yes|1$/i.test(pick(row, ['Notification Cancelled', 'Cancelled'])),
     ritmNumber: pick(row, ['RITM Number', 'RITM']) || undefined,
@@ -287,6 +288,8 @@ export function projectInputFromRow(row: TableRow): NewProjectInput {
     description: pick(row, ['Request Description/Explanation', 'Description', 'Summary']) || 'Imported project',
     fiscalYear: pick(row, ['Fiscal Year', 'FY']) || undefined,
     piaNumber: pick(row, ['PIA Number', 'PIA']) || undefined,
+    oneTrustProjectId: pick(row, ['OneTrust Project ID', 'OneTrust ID']) || undefined,
+    oneTrustUrl: pick(row, ['OneTrust Link', 'OneTrust URL']) || undefined,
     ssdsTask: pick(row, ['SSDS Task']) || undefined,
     ssdsType: pick(row, ['SSDS Type']) || 'N/A',
     projectUid: pick(row, ['Project UID', 'UID']) || undefined,

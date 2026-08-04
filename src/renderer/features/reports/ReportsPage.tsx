@@ -80,7 +80,7 @@ export function ReportsPage() {
   ] as const;
 
   const projectKpis = [
-    ['Total projects', projects.length],
+    ['Total data notifications', projects.length],
     ['Cancelled', cancelledProjects],
     ['DD source', projects.filter((p) => p.source === 'DD').length],
     ['SSDS source', projects.filter((p) => p.source === 'SSDS').length],
@@ -100,8 +100,10 @@ export function ReportsPage() {
       p.description,
       p.fiscalYear ?? '',
       p.piaNumber ?? '',
+      p.oneTrustProjectId ?? '',
+      p.oneTrustUrl ?? '',
       p.ssdsTask ?? '',
-      p.ssdsType,
+      p.ssdsType ?? '',
       p.projectUid ?? '',
       p.businessUnit ?? '',
       p.businessSponsors ?? '',
@@ -116,9 +118,9 @@ export function ReportsPage() {
   function projectsDetailRows(): XlsxRow[] {
     const rows: XlsxRow[] = [[
       'Parent Project',
-      'Project Number', 'Project Name', 'Source', "Date Notification Rec'd", 'Project Status',
+      'Project Number', 'Project Name', 'Source Information', "Date Notification Rec'd", 'Data Notification Status',
       'RITM Number', 'Investment Class', 'Request Description/Explanation',
-      'Fiscal Year', 'PIA Number', 'SSDS Task', 'SSDS Type', 'Project UID',
+      'Fiscal Year', 'PIA Number', 'OneTrust Project ID', 'OneTrust Link', 'SSDS Task', 'SSDS Type', 'Project UID',
       'Business Unit', 'Business Sponsors', 'Demand Number', 'Assets Mentioned', 'Comments',
     ]];
 
@@ -152,7 +154,7 @@ export function ReportsPage() {
           sources.join(', '),
           dates.length ? fmtDate(dates[dates.length - 1]) : (children.every((c) => c.notificationCancelled) ? 'Cancelled' : '—'),
           '',
-          '', '', '', '', '', '', '', '', '', '', '', '', '',
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
         ],
         outlineLevel: 0,
       });
@@ -166,18 +168,19 @@ export function ReportsPage() {
   function exportReport() {
     downloadXlsx('privacyflow-report.xlsx', [
       {
-        name: 'Requests Summary',
+        name: 'DSR Requests Summary',
         rows: [
           ['Metric', 'Value'],
           ...requestKpis.map(([k, v]) => [k, v] as (string | number)[]),
         ],
       },
       {
-        name: 'Requests Detail',
+        name: 'DSR Requests Detail',
         rows: [
-          ['Request', 'Request ID', 'Subject', 'Types', 'Status', 'Date Received'],
+          ['DSRREQ #', 'ServiceNow Link', 'Request ID', 'Subject', 'Types', 'Status', 'Date Received'],
           ...cases.map((c) => [
             c.caseNumber,
+            c.serviceNowUrl ?? '',
             c.subject.identifiers.find((i) => i.label === 'Request ID')?.value ?? '—',
             c.subject.lastName,
             c.requestTypes.join('; '),
@@ -187,14 +190,14 @@ export function ReportsPage() {
         ],
       },
       {
-        name: 'Projects Summary',
+        name: 'Data Notifications Summary',
         rows: [
           ['Metric', 'Value'],
           ...projectKpis.map(([k, v]) => [k, v] as (string | number)[]),
         ],
       },
       {
-        name: 'Projects Detail',
+        name: 'Data Notifications Detail',
         rows: projectsDetailRows(),
       },
     ]);
@@ -204,7 +207,7 @@ export function ReportsPage() {
     <div>
       <PageHeader
         title="Reports"
-        subtitle="Compliance and operational reporting across Requests and Projects."
+        subtitle="Compliance and operational reporting across DSR Requests and Data Notifications."
         actions={
           <GlassButton variant="primary" onClick={exportReport}>
             <Download className="h-4 w-4" /> Export summary
@@ -212,10 +215,10 @@ export function ReportsPage() {
         }
       />
 
-      {/* ------------------------------ Requests ------------------------------ */}
+      {/* ---------------------------- DSR Requests ---------------------------- */}
       <div className="mb-3 flex items-center gap-2">
         <FolderOpen className="h-4 w-4 text-accent" />
-        <h2 className="text-base font-semibold text-ink">Requests</h2>
+        <h2 className="text-base font-semibold text-ink">DSR Requests</h2>
         <GlassBadge tone="info">{cases.length} total</GlassBadge>
       </div>
 
@@ -243,7 +246,7 @@ export function ReportsPage() {
         </GlassCard>
 
         <GlassCard>
-          <h3 className="mb-3 text-sm font-semibold text-ink">Requests by source/channel</h3>
+          <h3 className="mb-3 text-sm font-semibold text-ink">DSR Requests by source/channel</h3>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={requestsByChannel}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--pf-border)" />
@@ -256,10 +259,10 @@ export function ReportsPage() {
         </GlassCard>
       </div>
 
-      {/* ------------------------------ Projects ------------------------------ */}
+      {/* ------------------------- Data Notifications ------------------------- */}
       <div className="mb-3 flex items-center gap-2">
         <FolderKanban className="h-4 w-4 text-accent" />
-        <h2 className="text-base font-semibold text-ink">Projects</h2>
+        <h2 className="text-base font-semibold text-ink">Data Notifications</h2>
         <GlassBadge tone="info">{projects.length} total</GlassBadge>
       </div>
 
@@ -274,7 +277,7 @@ export function ReportsPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <GlassCard>
-          <h3 className="mb-3 text-sm font-semibold text-ink">Projects by source</h3>
+          <h3 className="mb-3 text-sm font-semibold text-ink">Data Notifications by source</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={projectsBySource}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--pf-border)" />
@@ -287,7 +290,7 @@ export function ReportsPage() {
         </GlassCard>
 
         <GlassCard>
-          <h3 className="mb-3 text-sm font-semibold text-ink">Projects by investment class</h3>
+          <h3 className="mb-3 text-sm font-semibold text-ink">Data Notifications by investment class</h3>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie
@@ -309,10 +312,9 @@ export function ReportsPage() {
 
       <GlassPanel className="mt-4">
         <p className="text-xs text-muted">
-          Exporting downloads a single Excel workbook (.xlsx) with four sheets: Requests Summary,
-          Requests Detail (every request row from the Requests tab), Projects Summary, and
-          Projects Detail. Projects sharing the same name are grouped with native collapsible
-          Excel row groups, just like the Projects tab export. It opens directly in Excel,
+          Exporting downloads a single Excel workbook (.xlsx) with four sheets: DSR Requests Summary,
+          DSR Requests Detail, Data Notifications Summary, and Data Notifications Detail. Data notifications
+          sharing the same project name are grouped with native collapsible Excel row groups. It opens directly in Excel,
           Numbers, or Google Sheets with no warnings.
         </p>
       </GlassPanel>

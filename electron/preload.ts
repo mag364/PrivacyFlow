@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('privacyflow', {
   mail: {
     openDraft: (input: { to: string; subject: string; body: string }) => ipcRenderer.invoke('mail:openDraft', input),
   },
+  external: {
+    open: (url: string) => ipcRenderer.invoke('external:open', url),
+  },
   graph: {
     startDeviceLogin: (input: { clientId: string; scopes?: string[] }) => ipcRenderer.invoke('graph:startDeviceLogin', input),
     pollDeviceLogin: (input: { clientId: string; deviceCode: string; interval: number; expiresIn: number }) =>

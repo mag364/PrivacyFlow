@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import {
   ArrowLeft, Mail, ShieldCheck, FileText, MessageSquare,
   StickyNote, ClipboardList, Send, Upload, Paperclip, Pencil, Check, X, Save,
-  ChevronLeft, ChevronRight, Link2, Unlink, Search,
+  ChevronLeft, ChevronRight, Link2, Unlink, Search, ExternalLink,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type {
@@ -23,6 +23,7 @@ import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { useAuth, can } from '../../store/auth';
 import { isSupportedSourceEmailFile, sourceEmailFromFile, sourceEmailSummary } from '../../lib/emailSource';
 import { insertTextAtCursor } from '../../lib/textInsert';
+import { isWebUrl, openExternalUrl } from '../../platform/workspace';
 
 type TabKey = 'overview' | 'documents' | 'communications' | 'notes' | 'audit';
 
@@ -45,6 +46,7 @@ interface EditDraft {
   intakeChannel: string;
   // Requester
   dsrreqNumber: string;
+  serviceNowUrl: string;
   lastName: string;
   email: string;
   relationship: string;
@@ -157,7 +159,7 @@ export function CaseDetailPage() {
       <GlassPanel>
         <EmptyState title="Request not found" description="This request may have been removed." />
         <div className="mt-4 flex justify-center">
-          <GlassButton onClick={() => navigate('/cases')}>Back to requests</GlassButton>
+          <GlassButton onClick={() => navigate('/cases')}>Back to DSR requests</GlassButton>
         </div>
       </GlassPanel>
     );
@@ -191,6 +193,7 @@ export function CaseDetailPage() {
       description: c!.description,
       intakeChannel: String(c!.intakeChannel),
       dsrreqNumber: c!.caseNumber,
+      serviceNowUrl: c!.serviceNowUrl ?? '',
       lastName: c!.subject.lastName,
       email: c!.subject.emails[0] ?? '',
       relationship: relationshipLabel(String(c!.subject.relationship)),
@@ -215,6 +218,7 @@ export function CaseDetailPage() {
     if (!draft.lastName.trim()) { setSaveError('Last name is required.'); return; }
     if (!draft.email.trim() || !/.+@.+\..+/.test(draft.email)) { setSaveError('A valid email is required.'); return; }
     if (!draft.description.trim()) { setSaveError('Description is required.'); return; }
+    if (draft.serviceNowUrl.trim() && !isWebUrl(draft.serviceNowUrl)) { setSaveError('ServiceNow Link must be a complete HTTP or HTTPS URL.'); return; }
     setSaveBusy(true);
     setSaveError('');
     try {
@@ -223,6 +227,7 @@ export function CaseDetailPage() {
         await platform().cases.updateCaseNumber(id, dsrreqNumber);
       }
       await platform().cases.update(id, {
+        serviceNowUrl: draft.serviceNowUrl.trim() || undefined,
         requestTypes: draft.requestTypes,
         description: draft.description,
         intakeChannel: draft.intakeChannel,
@@ -635,6 +640,14 @@ export function CaseDetailPage() {
                       <Field label="Email">
                         <GlassInput type="email" value={draft.email} onChange={(e) => setD({ email: e.target.value })} />
                       </Field>
+                      <Field label="ServiceNow Link" hint="Optional full URL for this DSRREQ record.">
+                        <GlassInput
+                          type="url"
+                          value={draft.serviceNowUrl}
+                          onChange={(e) => setD({ serviceNowUrl: e.target.value })}
+                          placeholder="https://raymondjames.service-now.com/..."
+                        />
+                      </Field>
                       <div className="grid grid-cols-2 gap-3">
                         <Field label="Relationship">
                           <GlassSelect value={draft.relationship} onChange={(e) => setD({ relationship: e.target.value })}>
@@ -944,7 +957,19 @@ export function CaseDetailPage() {
             <p className="text-sm font-medium text-ink">{c.subject.lastName}</p>
             <p className="mb-3 text-xs text-muted">{relationshipLabel(c.subject.relationship)}{c.subject.minor ? ' · Minor' : ''}{c.subject.authorizedAgent ? ' · Agent' : ''}</p>
             <div className="flex flex-col gap-1.5 text-sm text-muted">
-              <span className="flex items-center gap-2">DSRREQ #: <span className="text-ink">{c.caseNumber}</span></span>
+              <span className="flex items-center gap-2">
+                DSRREQ #:
+                {c.serviceNowUrl && isWebUrl(c.serviceNowUrl) ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-accent hover:underline focus-ring"
+                    onClick={() => void openExternalUrl(c.serviceNowUrl!)}
+                    title="Open this DSRREQ in ServiceNow"
+                  >
+                    {c.caseNumber} <ExternalLink className="h-3.5 w-3.5" />
+                  </button>
+                ) : <span className="text-ink">{c.caseNumber}</span>}
+              </span>
               {c.subject.emails.map((e) => <span key={e} className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /> {e}</span>)}
               {c.subject.clientCenterStatus && (
                 <span className="flex items-center gap-2">Client Center: <GlassBadge tone={c.subject.clientCenterStatus === 'Located' ? 'success' : 'warn'}>{c.subject.clientCenterStatus}</GlassBadge></span>

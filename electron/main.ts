@@ -1184,7 +1184,7 @@ ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: 
   return true;
 });
 
-function runOutlookScript(script: string): Promise<string> {
+function runOutlookScript(script: string, successMarker?: string): Promise<string> {
   if (process.platform !== 'win32') {
     return Promise.reject(new Error('Local Outlook integration is only available in the Windows desktop app.'));
   }
@@ -1195,6 +1195,10 @@ function runOutlookScript(script: string): Promise<string> {
       maxBuffer: 1024 * 1024,
     }, (error, stdout, stderr) => {
       if (error) {
+        if (successMarker && stdout.includes(successMarker)) {
+          resolve(stdout.trim());
+          return;
+        }
         reject(new Error((stderr || error.message || 'Outlook automation failed.').trim()));
         return;
       }
@@ -1224,6 +1228,7 @@ $accounts | ConvertTo-Json -Compress
 });
 
 ipcMain.handle('outlook:openDraft', async (_e, input: { accountEmail?: string; to?: string; subject?: string; body?: string }) => {
+  const successMarker = 'PRIVACYFLOW_DRAFT_OPENED';
   const accountEmail = String(input?.accountEmail || '').trim();
   const to = String(input?.to || '').trim();
   if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
@@ -1257,10 +1262,16 @@ $mail.To = [string]$input.to
 $mail.Subject = [string]$input.subject
 $mail.Body = [string]$input.body
 $mail.Display($false)
-@{ ok = $true } | ConvertTo-Json -Compress
+[Console]::Out.WriteLine('${successMarker}')
+[Console]::Out.Flush()
+if ($mail) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($mail) }
+if ($session) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($session) }
+if ($outlook) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($outlook) }
+[GC]::Collect()
+[GC]::WaitForPendingFinalizers()
 `;
-  await runOutlookScript(script);
-  return true;
+  const stdout = await runOutlookScript(script, successMarker);
+  return stdout.includes(successMarker);
 });
 
 app.whenReady().then(() => {

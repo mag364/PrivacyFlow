@@ -571,7 +571,8 @@ async function runAutomations(
     } else if ((m365?.mode === 'outlook' || m365?.mode === 'mailto') && /.+@.+\..+/.test(recipient)) {
       try {
         if (m365.mode === 'outlook' && outlook) {
-          await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, subject, body });
+          const opened = await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, subject, body });
+          if (!opened) throw new Error('Outlook did not confirm that the draft window opened.');
           deliveryStatus = 'Draft opened in Outlook';
         } else if (fallbackDraft) {
           await fallbackDraft.openDraft({ to: recipient, subject, body });

@@ -288,6 +288,25 @@ function authSessionKey(): string {
   return crypto.createHash('sha256').update(path.resolve(dbPath).toLowerCase()).digest('hex');
 }
 
+function userSettingsPath(userId: string): string {
+  const id = crypto.createHash('sha256').update(`${authSessionKey()}\0${userId}`).digest('hex');
+  return path.join(app.getPath('userData'), 'user-settings', `${id}.json`);
+}
+
+function readUserSettings(userId: string): unknown | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(userSettingsPath(userId), 'utf8')) as unknown;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeUserSettings(userId: string, settings: unknown): void {
+  if (!settings || typeof settings !== 'object') throw new Error('Local user settings must be an object.');
+  writeAtomic(userSettingsPath(userId), JSON.stringify(settings, null, 2));
+}
+
 function readAuthSessions(): StoredAuthSessions {
   try {
     const parsed = JSON.parse(fs.readFileSync(authSessionsPath(), 'utf8')) as StoredAuthSessions;
@@ -827,6 +846,19 @@ ipcMain.handle('authSession:set', (_e, userId: string) => {
   sessions[authSessionKey()] = session;
   writeAuthSessions(sessions);
   return session;
+});
+
+ipcMain.handle('userSettings:get', (_e, userId: string) => {
+  const cleanUserId = String(userId || '').trim();
+  if (!cleanUserId) throw new Error('A user ID is required.');
+  return readUserSettings(cleanUserId);
+});
+
+ipcMain.handle('userSettings:set', (_e, userId: string, settings: unknown) => {
+  const cleanUserId = String(userId || '').trim();
+  if (!cleanUserId) throw new Error('A user ID is required.');
+  writeUserSettings(cleanUserId, settings);
+  return true;
 });
 
 ipcMain.handle('authSession:touch', () => {

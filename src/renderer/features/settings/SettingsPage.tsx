@@ -1146,14 +1146,20 @@ export function SettingsPage() {
 
   React.useEffect(() => {
     platform().system.settings().then(setSettings);
-    platform().auth.listUsers().then(setUsers);
-  }, []);
+    if (can(user?.role, 'users.manage')) platform().auth.listUsers().then(setUsers);
+  }, [user?.role]);
 
   if (!settings) return <Spinner label="Loading settings…" />;
 
   const editable = can(user?.role, 'settings.manage');
+  const localEditable = !!user;
   const canManageUsers = can(user?.role, 'users.manage');
   const m365 = settings.m365;
+  const visibleTabs = TABS.filter(({ key }) => {
+    if (key === 'users') return canManageUsers;
+    if (key === 'organization' || key === 'import_export' || key === 'backup_restore') return editable;
+    return true;
+  });
 
   async function save() {
     const s = await platform().system.updateSettings(settings!);
@@ -1526,7 +1532,7 @@ export function SettingsPage() {
       <PageHeader title="Settings" subtitle="Workspace, appearance, organization, integrations, and user management." />
 
       <div className="mb-4 flex flex-wrap gap-1 border-b border-line pb-2">
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {visibleTabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -1685,7 +1691,7 @@ export function SettingsPage() {
                     {m365.mode === 'simulated' ? ' · Simulated delivery (browser preview)' : ''}
                   </p>
                 </div>
-                {editable && (
+                {localEditable && (
                   <div className="flex flex-wrap gap-2">
                     <GlassButton variant="subtle" loading={m365TestBusy} onClick={testM365Connection}>
                       <Mail className="h-4 w-4" /> Test connection
@@ -1716,10 +1722,10 @@ export function SettingsPage() {
 
               {!connecting ? (
                 <div>
-                  <GlassButton variant="primary" disabled={!editable} onClick={() => setConnecting(true)}>
+                  <GlassButton variant="primary" disabled={!localEditable} onClick={() => setConnecting(true)}>
                     <Link2 className="h-4 w-4" /> Connect Microsoft 365
                   </GlassButton>
-                  {!editable && <p className="mt-2 text-xs text-muted">Only administrators and privacy managers can connect integrations.</p>}
+                  {!localEditable && <p className="mt-2 text-xs text-muted">Sign in to connect your Outlook mailbox.</p>}
                 </div>
               ) : (
                 <div className="flex max-w-lg flex-col gap-3 rounded-xl border border-accent/40 bg-[var(--pf-surface)] p-4">

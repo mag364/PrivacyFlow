@@ -11,7 +11,7 @@ import { PageHeader } from '../../layouts/AppShell';
 import {
   GlassPanel, GlassButton, GlassBadge, GlassInput, GlassSelect, GlassTextarea, Field, Spinner,
 } from '../../components/glass';
-import { useAuth, can } from '../../store/auth';
+import { useAuth } from '../../store/auth';
 import { insertTextAtCursor } from '../../lib/textInsert';
 
 const uid = () =>
@@ -55,7 +55,7 @@ export function AutomationPage() {
 
   if (!settings) return <Spinner label="Loading automation settings…" />;
 
-  const editable = can(user?.role, 'settings.manage');
+  const editable = !!user;
 
   function patch(p: Partial<OrgSettings>) {
     setSettings({ ...settings!, ...p });
@@ -170,7 +170,7 @@ export function AutomationPage() {
     <div>
       <PageHeader
         title="Automation"
-        subtitle="Automated template emails to requesters and departments."
+        subtitle="Your personal templates, rules, recipients, and note shortcuts."
         actions={
           editable && (
             <GlassButton variant="primary" onClick={save}>
@@ -183,7 +183,7 @@ export function AutomationPage() {
 
       {!editable && (
         <GlassPanel className="mb-4">
-          <p className="text-sm text-muted">You have read-only access. Contact an administrator or privacy manager to change automation.</p>
+          <p className="text-sm text-muted">Sign in to change your personal automation settings.</p>
         </GlassPanel>
       )}
 

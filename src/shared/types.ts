@@ -329,6 +329,14 @@ export interface M365Integration {
   fallback?: 'mailto';
 }
 
+export interface UserSettings {
+  emailTemplates: EmailTemplate[];
+  automationRules: AutomationRule[];
+  automationRecipients: AutomationRecipient[];
+  noteTemplates: NoteTemplate[];
+  m365: M365Integration;
+}
+
 export interface OrgSettings {
   organizationName: string;
   caseNumberPrefix: string;
@@ -345,7 +353,7 @@ export interface OrgSettings {
   dueSoonThresholdDays: number;
   autoPauseSla: boolean;
   escalationAlerts: boolean;
-  // ---- Email automation ----
+  // ---- Per-user settings (legacy copies may remain in the shared workspace) ----
   emailTemplates: EmailTemplate[];
   automationRules: AutomationRule[];
   automationRecipients: AutomationRecipient[];

@@ -97,6 +97,11 @@ export interface AuthSessionBridge {
   clear: () => Promise<boolean>;
 }
 
+export interface UserSettingsBridge {
+  get: (userId: string) => Promise<unknown | null>;
+  set: (userId: string, settings: unknown) => Promise<boolean>;
+}
+
 export interface UpdaterBridge {
   downloadReleaseAsset: (input: DownloadUpdateInput) => Promise<DownloadUpdateResult>;
   getApplicationFolder?: () => Promise<ApplicationFolderInfo>;
@@ -203,6 +208,7 @@ interface Injected {
   isElectron?: boolean;
   workspace?: WorkspaceBridge;
   authSession?: AuthSessionBridge;
+  userSettings?: UserSettingsBridge;
   updater?: UpdaterBridge;
   backup?: BackupBridge;
   mail?: MailBridge;
@@ -221,6 +227,10 @@ export function workspaceBridge(): WorkspaceBridge | null {
 
 export function authSessionBridge(): AuthSessionBridge | null {
   return injected().authSession ?? null;
+}
+
+export function userSettingsBridge(): UserSettingsBridge | null {
+  return injected().userSettings ?? null;
 }
 
 export function updaterBridge(): UpdaterBridge | null {

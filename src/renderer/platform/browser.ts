@@ -2,13 +2,14 @@ import { addDays, isSameMonth, parseISO } from 'date-fns';
 import type {
   DsrCase, AuditEvent, IntegrityReport, OrgSettings, CaseNote, SlaInfo, Project, SlaRule,
   EmailTemplate, AutomationRule, AutomationTrigger, AutomationRecipient, User, CaseDocument, Communication,
-  SourceEmail, NoteTemplate, CaseLink,
+  SourceEmail, NoteTemplate, CaseLink, UserSettings, M365Integration,
 } from '@shared/types';
 import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
 import { replacePlaceholders, requestPlaceholderValues } from '@shared/placeholders';
 import { automationConditionsMatch } from '@shared/automation';
+import { userOwnsM365Connection } from '@shared/userSettings';
 import { computeDueDate } from '@shared/sla';
 import { verifyChain } from '@shared/audit';
 import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared/password';
@@ -22,7 +23,7 @@ import {
   uid, fakeHash,
 } from './seed';
 import {
-  workspaceBridge, authSessionBridge, isReadOnly, mailBridge, outlookBridge, graphBridge,
+  workspaceBridge, authSessionBridge, userSettingsBridge, isReadOnly, mailBridge, outlookBridge, graphBridge,
   type LocalAuthSession,
 } from './workspace';
 
@@ -41,8 +42,10 @@ import {
 
 const KEY = 'privacyflow.db.v1';
 const AUTH_SESSION_KEY = 'privacyflow.auth-session.v1';
+const USER_SETTINGS_KEY_PREFIX = 'privacyflow.user-settings.v1';
 
 let sessionUserId: string | null = null;
+let userSettingsCache: { userId: string; settings: UserSettings } | null = null;
 
 async function readLocalAuthSession(): Promise<LocalAuthSession | null> {
   const bridge = authSessionBridge();
@@ -79,6 +82,7 @@ async function touchLocalAuthSession(): Promise<void> {
 
 async function clearLocalAuthSession(): Promise<void> {
   sessionUserId = null;
+  userSettingsCache = null;
   const bridge = authSessionBridge();
   if (bridge) {
     await bridge.clear();
@@ -187,6 +191,84 @@ function defaultSettings(): OrgSettings {
     noteTemplates: defaultNoteTemplates(),
     m365: { connected: false, mode: 'simulated' },
   };
+}
+
+function initialUserSettings(d: Db, user: User): UserSettings {
+  const shared = d.settings;
+  return {
+    emailTemplates: clone(shared.emailTemplates ?? defaultEmailTemplates()),
+    automationRules: clone(shared.automationRules ?? defaultAutomationRules()),
+    automationRecipients: clone(shared.automationRecipients ?? defaultAutomationRecipients()),
+    noteTemplates: clone(shared.noteTemplates ?? defaultNoteTemplates()),
+    m365: userOwnsM365Connection(shared.m365, user)
+      ? clone(shared.m365)
+      : { connected: false, mode: 'simulated' },
+  };
+}
+
+function normalizeUserSettings(raw: unknown, fallback: UserSettings): UserSettings {
+  const value = raw && typeof raw === 'object' ? raw as Partial<UserSettings> : {};
+  return {
+    emailTemplates: Array.isArray(value.emailTemplates) ? value.emailTemplates : fallback.emailTemplates,
+    automationRules: Array.isArray(value.automationRules) ? value.automationRules : fallback.automationRules,
+    automationRecipients: Array.isArray(value.automationRecipients) ? value.automationRecipients : fallback.automationRecipients,
+    noteTemplates: Array.isArray(value.noteTemplates) ? value.noteTemplates : fallback.noteTemplates,
+    m365: value.m365 && typeof value.m365.connected === 'boolean' ? value.m365 : fallback.m365,
+  };
+}
+
+function browserUserSettingsKey(userId: string): string {
+  return `${USER_SETTINGS_KEY_PREFIX}.${userId}`;
+}
+
+async function readUserSettings(userId: string): Promise<unknown | null> {
+  const bridge = userSettingsBridge();
+  if (bridge) return bridge.get(userId);
+  try {
+    const raw = localStorage.getItem(browserUserSettingsKey(userId));
+    return raw ? JSON.parse(raw) as unknown : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeUserSettings(userId: string, settings: UserSettings): Promise<void> {
+  const bridge = userSettingsBridge();
+  if (bridge) {
+    await bridge.set(userId, settings);
+    return;
+  }
+  localStorage.setItem(browserUserSettingsKey(userId), JSON.stringify(settings));
+}
+
+async function ensureUserSettings(d: Db, userId: string): Promise<UserSettings> {
+  if (userSettingsCache?.userId === userId) return userSettingsCache.settings;
+  const user = d.users.find((candidate) => candidate.id === userId);
+  if (!user) throw new Error('The signed-in user no longer exists.');
+  const fallback = initialUserSettings(d, user);
+  const stored = await readUserSettings(userId);
+  const settings = normalizeUserSettings(stored, fallback);
+  userSettingsCache = { userId, settings };
+  if (!stored) await writeUserSettings(userId, settings);
+  if (userOwnsM365Connection(d.settings.m365, user) && !isReadOnly()) {
+    d.settings.m365 = { connected: false, mode: 'simulated' };
+    save(d);
+  }
+  return settings;
+}
+
+function effectiveSettings(d: Db): OrgSettings {
+  if (!sessionUserId || userSettingsCache?.userId !== sessionUserId) return d.settings;
+  return { ...d.settings, ...userSettingsCache.settings };
+}
+
+async function persistActiveUserSettings(d: Db, patch: Partial<UserSettings>): Promise<UserSettings> {
+  if (!sessionUserId) throw new Error('Sign in before changing personal settings.');
+  const current = await ensureUserSettings(d, sessionUserId);
+  const settings = { ...current, ...patch };
+  userSettingsCache = { userId: sessionUserId, settings };
+  await writeUserSettings(sessionUserId, settings);
+  return settings;
 }
 
 function ruleFor(settings: OrgSettings, jurisdiction: string): SlaRule {
@@ -408,20 +490,20 @@ function tokenExpiry(expiresIn: number): string {
 
 async function graphAccessToken(d: Db): Promise<string | null> {
   const graph = graphBridge();
-  const m365 = d.settings.m365;
+  const m365 = effectiveSettings(d).m365;
   if (!graph || m365?.mode !== 'graph' || !m365.clientId) return null;
   if (m365.accessToken && m365.expiresAt && new Date(m365.expiresAt).getTime() > Date.now() + 60_000) {
     return m365.accessToken;
   }
   if (!m365.refreshToken) return m365.accessToken ?? null;
   const token = await graph.refreshToken({ clientId: m365.clientId, refreshToken: m365.refreshToken });
-  d.settings.m365 = {
+  const updated: M365Integration = {
     ...m365,
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? m365.refreshToken,
     expiresAt: tokenExpiry(token.expires_in),
   };
-  save(d);
+  await persistActiveUserSettings(d, { m365: updated });
   return token.access_token;
 }
 
@@ -431,10 +513,11 @@ async function runAutomations(
   trigger: AutomationTrigger,
   ctx: { toStatus?: string; changedFields?: string[] },
 ): Promise<void> {
-  const rules = (d.settings.automationRules ?? []).filter((r) => r.enabled && r.trigger === trigger);
+  const settings = effectiveSettings(d);
+  const rules = (settings.automationRules ?? []).filter((r) => r.enabled && r.trigger === trigger);
   if (!rules.length) return;
 
-  const m365 = d.settings.m365;
+  const m365 = settings.m365;
   const viaM365 = !!m365?.connected;
   const sender = viaM365 ? (m365.accountEmail ?? 'connected mailbox') : null;
 
@@ -442,21 +525,21 @@ async function runAutomations(
     if (trigger === 'status.changed' && rule.toStatus && rule.toStatus !== ctx.toStatus) continue;
     if (trigger === 'case.updated' && rule.updateField && !ctx.changedFields?.includes(rule.updateField)) continue;
     if (!automationConditionsMatch(rule, c)) continue;
-    const tpl = (d.settings.emailTemplates ?? []).find((t) => t.id === rule.templateId);
+    const tpl = (settings.emailTemplates ?? []).find((t) => t.id === rule.templateId);
     if (!tpl) continue;
 
     const isDept = tpl.audience === 'department';
     const sourceEmail = sourceEmailForCase(d, c.id);
-    const resolved = isDept ? resolveAutomationRecipient(d.settings, tpl.department) : null;
+    const resolved = isDept ? resolveAutomationRecipient(settings, tpl.department) : null;
     const recipient = isDept
       ? (resolved?.email || `${resolved?.label ?? 'Department'} team`)
       : (sourceEmail?.fromEmail ?? c.subject.emails[0] ?? 'requester');
     const recipientLabel = isDept && resolved?.email ? `${resolved.label} <${resolved.email}>` : recipient;
-    const renderedSubject = renderTemplate(tpl.subject, c, d.settings.organizationName, tpl.department);
+    const renderedSubject = renderTemplate(tpl.subject, c, settings.organizationName, tpl.department);
     const subject = sourceEmail
       ? prefixedSubject(isDept ? 'FW' : 'RE', sourceEmail.subject)
       : renderedSubject;
-    const body = `${renderTemplate(tpl.body, c, d.settings.organizationName, tpl.department)}${sourceEmail ? formatOriginalEmail(sourceEmail) : ''}`;
+    const body = `${renderTemplate(tpl.body, c, settings.organizationName, tpl.department)}${sourceEmail ? formatOriginalEmail(sourceEmail) : ''}`;
     const now = new Date().toISOString();
     const graph = m365?.mode === 'graph' ? graphBridge() : null;
     const outlook = m365?.mode === 'outlook' ? outlookBridge() : null;
@@ -969,7 +1052,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
     system: {
       async settings() {
         const d = load();
-        return d ? clone(d.settings) : defaultSettings();
+        if (!d) return defaultSettings();
+        if (sessionUserId) await ensureUserSettings(d, sessionUserId);
+        return clone(effectiveSettings(d));
       },
       async completeSetup(input: CompleteSetupInput) {
         assertWritable();
@@ -990,21 +1075,35 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         return clone(seeded.settings);
       },
       async updateSettings(patch: Partial<OrgSettings>) {
-        assertWritable();
         const d = db();
-        const before = clone(d.settings);
-        d.settings = { ...d.settings, ...patch };
-        await appendAudit(d, actorOf(d), {
-          category: 'System',
-          action: 'settings.updated',
-          entityType: 'settings',
-          entityId: 'workspace',
-          summary: 'Workspace settings updated',
-          previousValue: before,
-          newValue: clone(d.settings),
-        });
-        save(d);
-        return clone(d.settings);
+        const localPatch: Partial<UserSettings> = {};
+        const sharedPatch = { ...patch };
+        const localKeys: (keyof UserSettings)[] = [
+          'emailTemplates', 'automationRules', 'automationRecipients', 'noteTemplates', 'm365',
+        ];
+        for (const key of localKeys) {
+          if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
+          Object.assign(localPatch, { [key]: patch[key] });
+          delete sharedPatch[key];
+        }
+
+        if (Object.keys(sharedPatch).length) {
+          assertWritable();
+          const before = clone(d.settings);
+          d.settings = { ...d.settings, ...sharedPatch };
+          await appendAudit(d, actorOf(d), {
+            category: 'System',
+            action: 'settings.updated',
+            entityType: 'settings',
+            entityId: 'workspace',
+            summary: 'Workspace settings updated',
+            previousValue: before,
+            newValue: clone(d.settings),
+          });
+          save(d);
+        }
+        if (Object.keys(localPatch).length) await persistActiveUserSettings(d, localPatch);
+        return clone(effectiveSettings(d));
       },
       async applyRetentionCleanup(options: RetentionCleanupOptions = {}): Promise<RetentionCleanupSummary> {
         assertWritable();
@@ -1208,6 +1307,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           return null;
         }
         sessionUserId = u.id;
+        await ensureUserSettings(d, u.id);
         return publicUser(u);
       },
       async listUsers() {
@@ -1223,6 +1323,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         }
         sessionUserId = user.id;
         await setLocalAuthSession(user.id);
+        await ensureUserSettings(d, user.id);
         await appendAudit(d, { id: user.id, name: user.name, role: user.role }, {
           category: 'Auth',
           action: 'auth.login',
@@ -1407,6 +1508,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         user.mustChangePassword = false;
         sessionUserId = user.id;
         await setLocalAuthSession(user.id);
+        await ensureUserSettings(d, user.id);
         await appendAudit(d, { id: user.id, name: user.name, role: user.role }, {
           category: 'Auth',
           action: wasForced ? 'auth.password_set' : 'auth.password_changed',

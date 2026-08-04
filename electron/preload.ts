@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('privacyflow', {
     touch: () => ipcRenderer.invoke('authSession:touch'),
     clear: () => ipcRenderer.invoke('authSession:clear'),
   },
+  userSettings: {
+    get: (userId: string) => ipcRenderer.invoke('userSettings:get', userId),
+    set: (userId: string, settings: unknown) => ipcRenderer.invoke('userSettings:set', userId, settings),
+  },
   updater: {
     downloadReleaseAsset: (input: { assetApiUrl: string; token?: string; fileName: string }) =>
       ipcRenderer.invoke('updater:downloadReleaseAsset', input),

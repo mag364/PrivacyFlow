@@ -127,9 +127,9 @@ function Protected({ availableRelease }: { availableRelease: AvailableRelease | 
         <Route path="/projects/new" element={<RequirePermission anyOf={['projects.create']}><NewProjectPage /></RequirePermission>} />
         <Route path="/projects/:id" element={<RequirePermission anyOf={['projects.view']}><ProjectDetailPage /></RequirePermission>} />
         <Route path="/reports" element={<RequirePermission anyOf={['reports.view']}><ReportsPage /></RequirePermission>} />
-        <Route path="/automation" element={<RequirePermission anyOf={['settings.manage']}><AutomationPage /></RequirePermission>} />
+        <Route path="/automation" element={<AutomationPage />} />
         <Route path="/audit" element={<RequirePermission anyOf={['audit.view']}><AuditPage /></RequirePermission>} />
-        <Route path="/settings" element={<RequirePermission anyOf={['settings.manage', 'users.manage']}><SettingsPage /></RequirePermission>} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

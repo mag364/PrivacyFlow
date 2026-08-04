@@ -32,9 +32,9 @@ const NAV: {
 }[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/reports', label: 'Reports', icon: BarChart3, anyOf: ['reports.view'] },
-  { to: '/automation', label: 'Automation', icon: Workflow, anyOf: ['settings.manage'] },
+  { to: '/automation', label: 'Automation', icon: Workflow },
   { to: '/audit', label: 'Audit', icon: ShieldCheck, anyOf: ['audit.view'] },
-  { to: '/settings', label: 'Settings', icon: Settings, anyOf: ['settings.manage', 'users.manage'] },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 function hasAnyPermission(role: Parameters<typeof can>[0], anyOf?: Permission[]): boolean {

@@ -8,6 +8,7 @@ import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
 import { replacePlaceholders, requestPlaceholderValues } from '@shared/placeholders';
+import { automationConditionsMatch } from '@shared/automation';
 import { computeDueDate } from '@shared/sla';
 import { verifyChain } from '@shared/audit';
 import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared/password';
@@ -318,25 +319,45 @@ function requestIdForCase(c: DsrCase): string {
   return c.subject.identifiers.find((identifier) => identifier.label === 'Request ID')?.value ?? '';
 }
 
-function changedAutomationFields(before: DsrCase, after: DsrCase): string[] {
-  const checks: Array<[string, unknown, unknown]> = [
-    ['requestTypes', before.requestTypes, after.requestTypes],
-    ['intakeChannel', before.intakeChannel, after.intakeChannel],
-    ['description', before.description, after.description],
-    ['subject.identifiers.Request ID', requestIdForCase(before), requestIdForCase(after)],
-    ['subject.lastName', before.subject.lastName, after.subject.lastName],
-    ['subject.emails', before.subject.emails, after.subject.emails],
-    ['subject.relationship', before.subject.relationship, after.subject.relationship],
-    ['subject.clientCenterStatus', before.subject.clientCenterStatus, after.subject.clientCenterStatus],
-    ['subject.emailedFA', before.subject.emailedFA, after.subject.emailedFA],
-    ['intakeDates.dateClientServiceReceivedEmail', before.intakeDates?.dateClientServiceReceivedEmail, after.intakeDates?.dateClientServiceReceivedEmail],
-    ['intakeDates.dateDppReceivedEmail', before.intakeDates?.dateDppReceivedEmail, after.intakeDates?.dateDppReceivedEmail],
-    ['intakeDates.standardResponseSent', before.intakeDates?.standardResponseSent, after.intakeDates?.standardResponseSent],
-    ['intakeDates.forwardedEmailToRon', before.intakeDates?.forwardedEmailToRon, after.intakeDates?.forwardedEmailToRon],
-    ['intakeDates.followUpEmailSent', before.intakeDates?.followUpEmailSent, after.intakeDates?.followUpEmailSent],
-    ['sla.closureDate', before.sla?.closureDate, after.sla?.closureDate],
+function automationFieldValues(c: DsrCase): Array<[string, unknown]> {
+  return [
+    ['requestTypes', c.requestTypes],
+    ['intakeChannel', c.intakeChannel],
+    ['description', c.description],
+    ['subject.identifiers.Request ID', requestIdForCase(c)],
+    ['subject.lastName', c.subject.lastName],
+    ['subject.emails', c.subject.emails],
+    ['subject.relationship', c.subject.relationship],
+    ['subject.clientCenterStatus', c.subject.clientCenterStatus],
+    ['subject.emailedFA', c.subject.emailedFA],
+    ['intakeDates.dateClientServiceReceivedEmail', c.intakeDates?.dateClientServiceReceivedEmail],
+    ['intakeDates.dateDppReceivedEmail', c.intakeDates?.dateDppReceivedEmail],
+    ['intakeDates.standardResponseSent', c.intakeDates?.standardResponseSent],
+    ['intakeDates.forwardedEmailToRon', c.intakeDates?.forwardedEmailToRon],
+    ['intakeDates.followUpEmailSent', c.intakeDates?.followUpEmailSent],
+    ['sla.closureDate', c.sla?.closureDate],
   ];
-  return checks.filter(([, beforeValue, afterValue]) => hasChanged(beforeValue, afterValue)).map(([field]) => field);
+}
+
+function changedAutomationFields(before: DsrCase, after: DsrCase): string[] {
+  const beforeValues = new Map(automationFieldValues(before));
+  return automationFieldValues(after)
+    .filter(([field, afterValue]) => hasChanged(beforeValues.get(field), afterValue))
+    .map(([field]) => field);
+}
+
+function populatedAutomationFields(c: DsrCase): string[] {
+  return automationFieldValues(c)
+    .filter(([, value]) => Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && String(value).trim() !== '')
+    .map(([field]) => field);
+}
+
+function inferredCaseStatus(c: DsrCase): CaseStatus | null {
+  if (c.sla?.closureDate || c.resolutionDate) return 'Closed';
+  if (c.intakeDates?.followUpEmailSent) return 'Follow-up Email Sent';
+  if (c.intakeDates?.forwardedEmailToRon) return 'Email Ron K.';
+  if (c.intakeDates?.standardResponseSent) return 'Email Response Sent';
+  return null;
 }
 
 // ---- Email automation engine -------------------------------------------------
@@ -420,8 +441,7 @@ async function runAutomations(
   for (const rule of rules) {
     if (trigger === 'status.changed' && rule.toStatus && rule.toStatus !== ctx.toStatus) continue;
     if (trigger === 'case.updated' && rule.updateField && !ctx.changedFields?.includes(rule.updateField)) continue;
-    if (rule.requestType && !c.requestTypes.map(String).includes(rule.requestType)) continue;
-    if (rule.intakeChannel && c.intakeChannel !== rule.intakeChannel) continue;
+    if (!automationConditionsMatch(rule, c)) continue;
     const tpl = (d.settings.emailTemplates ?? []).find((t) => t.id === rule.templateId);
     if (!tpl) continue;
 
@@ -1453,6 +1473,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           nextAction: nextActionFor('New'),
           intakeDates: input.intakeDates,
         };
+        const initialStatus = inferredCaseStatus(c) ?? 'New';
+        c.status = initialStatus;
+        c.nextAction = nextActionFor(initialStatus);
         d.cases.push(c);
         if (input.sourceEmail) {
           d.communications.push({
@@ -1478,7 +1501,7 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           });
         }
         d.statusHistory.push({
-          id: uid(), caseId: c.id, fromStatus: null, toStatus: 'New',
+          id: uid(), caseId: c.id, fromStatus: null, toStatus: initialStatus,
           actorId: actor?.id ?? 'system', at: now.toISOString(),
         });
         ['Send standard response', 'Forward email to Ron K.', 'Send follow-up email', 'Close the request']
@@ -1496,9 +1519,22 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
           entityId: c.id,
           caseId: c.id,
           summary: `Case ${c.caseNumber} created (${c.requestTypes.join(', ')})`,
-          newValue: { status: 'New', jurisdiction: c.jurisdiction },
+          newValue: { status: initialStatus, jurisdiction: c.jurisdiction },
         });
         await runAutomations(d, c, 'case.created', {});
+        await runAutomations(d, c, 'case.updated', { changedFields: populatedAutomationFields(c) });
+        if (c.intakeDates?.standardResponseSent) {
+          await runAutomations(d, c, 'status.changed', { toStatus: 'Email Response Sent' });
+        }
+        if (c.intakeDates?.forwardedEmailToRon) {
+          await runAutomations(d, c, 'status.changed', { toStatus: 'Email Ron K.' });
+        }
+        if (c.intakeDates?.followUpEmailSent) {
+          await runAutomations(d, c, 'status.changed', { toStatus: 'Follow-up Email Sent' });
+        }
+        if (c.sla?.closureDate || c.resolutionDate) {
+          await runAutomations(d, c, 'status.changed', { toStatus: 'Closed' });
+        }
         save(d);
         return clone(c);
       },
@@ -1513,17 +1549,10 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         const hasForwardedToRon = !!c.intakeDates?.forwardedEmailToRon;
         const hasFollowUp = !!c.intakeDates?.followUpEmailSent;
         const hasClosed = !!c.sla?.closureDate || !!c.resolutionDate;
-        const inferredStatus = hasClosed
-          ? 'Closed'
-          : hasFollowUp
-            ? 'Follow-up Email Sent'
-            : hasForwardedToRon
-              ? 'Email Ron K.'
-              : hasStandardResponse
-                ? 'Email Response Sent'
-                : null;
-        if (inferredStatus && CASE_STATUSES.includes(inferredStatus) && c.status !== inferredStatus) {
+        const inferredStatus = inferredCaseStatus(c);
+        if (inferredStatus && c.status !== inferredStatus) {
           c.status = inferredStatus;
+          c.nextAction = nextActionFor(inferredStatus);
         }
         c.updatedAt = new Date().toISOString();
         c.lastActivityAt = c.updatedAt;

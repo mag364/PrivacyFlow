@@ -300,6 +300,7 @@ export interface AutomationRule {
   updateField?: string;
   toStatus?: CaseStatus | string;
   requestType?: string;
+  excludeRequestType?: string;
   intakeChannel?: string;
   templateId: string;
   enabled: boolean;

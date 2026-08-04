@@ -156,6 +156,7 @@ export function AutomationPage() {
   const ruleConditionText = (r: AutomationRule) => {
     const conditions = [
       r.requestType ? `request type is ${r.requestType}` : '',
+      r.excludeRequestType ? `request type is not ${r.excludeRequestType}` : '',
       r.intakeChannel ? `intake channel is ${r.intakeChannel}` : '',
     ].filter(Boolean);
     return conditions.length ? `Only when ${conditions.join(' and ')}` : 'Applies to all requests';
@@ -343,7 +344,7 @@ export function AutomationPage() {
             )}
           </div>
           <p className="mb-3 text-xs text-muted">
-            Rules run saved email templates when requests are created, details change, or status changes are logged. Add optional conditions to limit a rule to a request type or intake channel.
+            Rules run saved email templates when requests are created, details change, or status changes are logged. Add optional conditions or a request type exception to control when a rule runs.
           </p>
 
           <div className="flex flex-col gap-2">
@@ -434,10 +435,34 @@ export function AutomationPage() {
                       )}
                     </div>
 
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-3">
                       <Field label="Request type condition">
-                        <GlassSelect value={r.requestType ?? ''} onChange={(e) => updateAutomationRule(r.id, { requestType: e.target.value || undefined })}>
+                        <GlassSelect
+                          value={r.requestType ?? ''}
+                          onChange={(e) => {
+                            const requestType = e.target.value || undefined;
+                            updateAutomationRule(r.id, {
+                              requestType,
+                              excludeRequestType: requestType === r.excludeRequestType ? undefined : r.excludeRequestType,
+                            });
+                          }}
+                        >
                           <option value="">Any request type</option>
+                          {REQUEST_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                        </GlassSelect>
+                      </Field>
+                      <Field label="Request type exception">
+                        <GlassSelect
+                          value={r.excludeRequestType ?? ''}
+                          onChange={(e) => {
+                            const excludeRequestType = e.target.value || undefined;
+                            updateAutomationRule(r.id, {
+                              excludeRequestType,
+                              requestType: excludeRequestType === r.requestType ? undefined : r.requestType,
+                            });
+                          }}
+                        >
+                          <option value="">No exception</option>
                           {REQUEST_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                         </GlassSelect>
                       </Field>

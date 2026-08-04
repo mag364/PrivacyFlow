@@ -102,11 +102,6 @@ export function NewCasePage() {
     try {
       const parsed = await sourceEmailFromFile(file);
       setSourceEmail(parsed);
-      if (parsed.fromEmail && !email.trim()) setEmail(parsed.fromEmail);
-      if (parsed.fromName && !lastName.trim()) {
-        const parts = parsed.fromName.trim().split(/\s+/);
-        setLastName(parts[parts.length - 1]);
-      }
       if (!description.trim()) setDescription(sourceEmailDescription(parsed));
     } catch (e) {
       setSourceEmailError(e instanceof Error ? e.message : 'Unable to read the uploaded email.');

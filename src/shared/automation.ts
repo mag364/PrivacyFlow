@@ -7,3 +7,7 @@ export function automationConditionsMatch(rule: AutomationRule, c: DsrCase): boo
   if (rule.intakeChannel && c.intakeChannel !== rule.intakeChannel) return false;
   return true;
 }
+
+export function requesterAutomationEmail(c: DsrCase): string {
+  return c.subject.emails.find((email) => email.trim())?.trim() ?? 'requester';
+}

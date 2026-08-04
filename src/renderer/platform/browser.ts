@@ -8,7 +8,7 @@ import type { CaseStatus, ProjectStatus } from '@shared/constants';
 import { CASE_STATUSES, OPEN_STATUSES, PROJECT_STATUSES, LEGACY_STATUS_MAP } from '@shared/constants';
 import { APP_CONFIG } from '@shared/config';
 import { replacePlaceholders, requestPlaceholderValues } from '@shared/placeholders';
-import { automationConditionsMatch } from '@shared/automation';
+import { automationConditionsMatch, requesterAutomationEmail } from '@shared/automation';
 import { userOwnsM365Connection } from '@shared/userSettings';
 import { computeDueDate } from '@shared/sla';
 import { verifyChain } from '@shared/audit';
@@ -533,7 +533,7 @@ async function runAutomations(
     const resolved = isDept ? resolveAutomationRecipient(settings, tpl.department) : null;
     const recipient = isDept
       ? (resolved?.email || `${resolved?.label ?? 'Department'} team`)
-      : (sourceEmail?.fromEmail ?? c.subject.emails[0] ?? 'requester');
+      : requesterAutomationEmail(c);
     const recipientLabel = isDept && resolved?.email ? `${resolved.label} <${resolved.email}>` : recipient;
     const renderedSubject = renderTemplate(tpl.subject, c, settings.organizationName, tpl.department);
     const subject = sourceEmail

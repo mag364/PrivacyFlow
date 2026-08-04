@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AutomationRule, DsrCase } from './types';
-import { automationConditionsMatch } from './automation';
+import { automationConditionsMatch, requesterAutomationEmail } from './automation';
 
 function rule(overrides: Partial<AutomationRule> = {}): AutomationRule {
   return {
@@ -69,5 +69,18 @@ describe('automationConditionsMatch', () => {
     expect(automationConditionsMatch(emailDoNotSell, request(['Do Not Sell']))).toBe(true);
     expect(automationConditionsMatch(emailDoNotSell, request(['Do Not Sell'], 'Web Form'))).toBe(false);
     expect(automationConditionsMatch(emailDoNotSell, request(['Access']))).toBe(false);
+  });
+});
+
+describe('requesterAutomationEmail', () => {
+  it('uses the requester email entered on the case', () => {
+    expect(requesterAutomationEmail(request(['Access']))).toBe('person@example.com');
+  });
+
+  it('does not invent a recipient when the case has no requester email', () => {
+    const withoutEmail = request(['Access']);
+    withoutEmail.subject.emails = [];
+
+    expect(requesterAutomationEmail(withoutEmail)).toBe('requester');
   });
 });

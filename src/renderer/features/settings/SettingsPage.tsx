@@ -5,6 +5,7 @@ import {
   KeyRound, Copy, HardDrive, FolderOpen, Lock, Pencil, Palette, Building2, Plug,
   Database, Trash2, RefreshCw, Download, ExternalLink, AlertTriangle, PackageCheck,
   Upload, FileJson, DatabaseBackup, ArchiveRestore,
+  Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { platform } from '../../platform';
@@ -25,6 +26,7 @@ import type { ImportSummary } from '../../platform/types';
 import {
   caseInputFromRow, privacyFlowPayloadFromJson, projectInputFromRow, rowsFromFile,
 } from '../../lib/importers';
+import { createAutomationTransfer, parseAutomationTransfer } from '@shared/automationTransfer';
 
 type TabKey = 'workspace' | 'appearance' | 'organization' | 'integrations' | 'import_export' | 'backup_restore' | 'users';
 
@@ -706,6 +708,8 @@ function ImportExportTab() {
   const requestRef = React.useRef<HTMLInputElement>(null);
   const projectRef = React.useRef<HTMLInputElement>(null);
   const privacyRef = React.useRef<HTMLInputElement>(null);
+  const automationRef = React.useRef<HTMLInputElement>(null);
+  const personalEditable = !!useAuth.getState().user;
   const editable = can(useAuth.getState().user?.role, 'settings.manage');
 
   function summaryText(summary: ImportSummary): string {
@@ -729,6 +733,51 @@ function ImportExportTab() {
       setError(e instanceof Error ? e.message : 'Unable to export tracking data.');
     } finally {
       setBusy('');
+    }
+  }
+
+  async function exportAutomation() {
+    setBusy('automation-export');
+    setError('');
+    setResult('');
+    try {
+      const settings = await platform().system.settings();
+      const transfer = createAutomationTransfer(settings);
+      downloadJson(`privacyflow-automation-${new Date().toISOString().slice(0, 10)}.json`, transfer);
+      setResult(
+        `Exported ${transfer.data.emailTemplates.length} email template${transfer.data.emailTemplates.length === 1 ? '' : 's'}, `
+        + `${transfer.data.automationRules.length} rule${transfer.data.automationRules.length === 1 ? '' : 's'}, `
+        + `${transfer.data.automationRecipients.length} recipient${transfer.data.automationRecipients.length === 1 ? '' : 's'}, and `
+        + `${transfer.data.noteTemplates.length} note template${transfer.data.noteTemplates.length === 1 ? '' : 's'}.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to export automation settings.');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function importAutomation(file: File) {
+    setBusy('automation-import');
+    setError('');
+    setResult('');
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error('The automation transfer file is larger than 5 MB.');
+      const data = parseAutomationTransfer(await file.text());
+      const confirmed = window.confirm(
+        `Replace your personal automation settings with ${data.emailTemplates.length} email template${data.emailTemplates.length === 1 ? '' : 's'}, `
+        + `${data.automationRules.length} rule${data.automationRules.length === 1 ? '' : 's'}, `
+        + `${data.automationRecipients.length} recipient${data.automationRecipients.length === 1 ? '' : 's'}, and `
+        + `${data.noteTemplates.length} note template${data.noteTemplates.length === 1 ? '' : 's'}? Your Outlook connection will not change.`,
+      );
+      if (!confirmed) return;
+      await platform().system.updateSettings(data);
+      setResult('Personal automation settings imported. Outlook connection unchanged.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to import automation settings.');
+    } finally {
+      setBusy('');
+      if (automationRef.current) automationRef.current.value = '';
     }
   }
 
@@ -793,7 +842,7 @@ function ImportExportTab() {
         <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Import &amp; Export</h3>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
           <div className="mb-3 flex items-center gap-2">
             <Database className="h-4 w-4 text-accent" />
@@ -855,6 +904,31 @@ function ImportExportTab() {
             </GlassButton>
             <GlassButton disabled={!editable || !!busy} loading={busy === 'privacyflow'} onClick={() => privacyRef.current?.click()}>
               <Upload className="h-4 w-4" /> Import JSON
+            </GlassButton>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-line bg-[var(--pf-surface)] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-accent" />
+            <p className="text-sm font-semibold text-ink">Personal automation</p>
+          </div>
+          <p className="mb-3 text-xs text-muted">
+            Share email templates, rules, recipients, and note templates with another PrivacyFlow user. Outlook connection details are never included.
+          </p>
+          <input
+            ref={automationRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) void importAutomation(file); }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <GlassButton disabled={!personalEditable || !!busy} loading={busy === 'automation-export'} onClick={exportAutomation}>
+              <Download className="h-4 w-4" /> Export automation
+            </GlassButton>
+            <GlassButton disabled={!personalEditable || !!busy} loading={busy === 'automation-import'} onClick={() => automationRef.current?.click()}>
+              <Upload className="h-4 w-4" /> Import automation
             </GlassButton>
           </div>
         </div>
@@ -1157,7 +1231,7 @@ export function SettingsPage() {
   const m365 = settings.m365;
   const visibleTabs = TABS.filter(({ key }) => {
     if (key === 'users') return canManageUsers;
-    if (key === 'organization' || key === 'import_export' || key === 'backup_restore') return editable;
+    if (key === 'organization' || key === 'backup_restore') return editable;
     return true;
   });
 

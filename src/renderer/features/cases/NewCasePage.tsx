@@ -11,7 +11,7 @@ import type { DsrCase, NoteTemplate, SourceEmail } from '@shared/types';
 import { PageHeader } from '../../layouts/AppShell';
 import { GlassButton, GlassInput, GlassSelect, GlassTextarea, GlassPanel, Field } from '../../components/glass';
 import { useAuth, can } from '../../store/auth';
-import { isSupportedSourceEmailFile, sourceEmailFromFile } from '../../lib/emailSource';
+import { isSupportedSourceEmailFile, sourceEmailDescription, sourceEmailFromFile } from '../../lib/emailSource';
 import { insertTextAtCursor } from '../../lib/textInsert';
 
 export function NewCasePage() {
@@ -107,7 +107,7 @@ export function NewCasePage() {
         const parts = parsed.fromName.trim().split(/\s+/);
         setLastName(parts[parts.length - 1]);
       }
-      if (parsed.bodyText && !description.trim()) setDescription(parsed.bodyText.slice(0, 1500));
+      if (!description.trim()) setDescription(sourceEmailDescription(parsed));
     } catch (e) {
       setSourceEmailError(e instanceof Error ? e.message : 'Unable to read the uploaded email.');
     }

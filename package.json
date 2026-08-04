@@ -1,8 +1,8 @@
 {
   "name": "privacyflow",
   "private": true,
-  "version": "1.1.1",
-  "releaseVersion": "1.1.01",
+  "version": "1.1.2",
+  "releaseVersion": "1.1.02",
   "type": "module",
   "main": "build/electron/main.js",
   "author": {

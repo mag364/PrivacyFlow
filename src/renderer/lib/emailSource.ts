@@ -164,6 +164,10 @@ export async function sourceEmailFromFile(file: File): Promise<SourceEmail> {
   throw new Error('Upload an Outlook .msg file or an .eml email file.');
 }
 
+export function sourceEmailDescription(email: SourceEmail): string {
+  return email.subject.trim() || email.filename;
+}
+
 export function sourceEmailSummary(email: SourceEmail): string {
   const lines = [
     `Uploaded source email: ${email.filename}`,

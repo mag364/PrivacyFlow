@@ -16,17 +16,19 @@ export type WorkspaceLockState =
   | { mode: 'write'; info: LockHolder }
   | { mode: 'read-only'; holder: LockHolder; stale: boolean };
 
+export interface WorkspaceSyncInfo {
+  mode: 'local-cache' | 'direct-shared' | 'read-only';
+  status: 'synced' | 'local-only' | 'pending' | 'syncing' | 'failed' | 'read-only';
+  localCachePath?: string;
+  lastSyncedAt?: string;
+  lastError?: string;
+}
+
 export interface WorkspaceInfo {
   dbPath: string;
   lockState: WorkspaceLockState;
   persisted?: boolean;
-  sync?: {
-    mode: 'local-cache' | 'direct-shared' | 'read-only';
-    status: 'synced' | 'local-only' | 'pending' | 'syncing' | 'failed' | 'read-only';
-    localCachePath?: string;
-    lastSyncedAt?: string;
-    lastError?: string;
-  };
+  sync?: WorkspaceSyncInfo;
 }
 
 export interface ChoosePathResult {
@@ -83,6 +85,7 @@ export interface WorkspaceBridge {
   info?: () => Promise<WorkspaceInfo>;
   syncNow?: () => Promise<WorkspaceInfo>;
   choosePath?: () => Promise<ChoosePathResult | null>;
+  onSyncState?: (callback: (state: WorkspaceSyncInfo) => void) => () => void;
 }
 
 export interface LocalAuthSession {

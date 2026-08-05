@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld('privacyflow', {
     info: () => ipcRenderer.invoke('workspace:info'),
     syncNow: () => ipcRenderer.invoke('workspace:syncNow'),
     choosePath: () => ipcRenderer.invoke('workspace:choosePath'),
+    onSyncState: (callback: (state: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: unknown) => callback(state);
+      ipcRenderer.on('workspace:syncState', handler);
+      return () => ipcRenderer.removeListener('workspace:syncState', handler);
+    },
   },
   authSession: {
     get: () => ipcRenderer.invoke('authSession:get'),

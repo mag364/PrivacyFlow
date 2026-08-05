@@ -77,7 +77,8 @@ function useLockState(): WorkspaceLockState {
 function useWorkspaceTitleInfo(): WorkspaceInfo | null {
   const [info, setInfo] = React.useState<WorkspaceInfo | null>(null);
   React.useEffect(() => {
-    if (!workspaceBridge()) return;
+    const bridge = workspaceBridge();
+    if (!bridge) return;
     let cancelled = false;
     const load = () => {
       workspaceInfo().then((next) => {
@@ -87,10 +88,14 @@ function useWorkspaceTitleInfo(): WorkspaceInfo | null {
       });
     };
     load();
-    const t = setInterval(load, 5000);
+    const unsubscribe = bridge.onSyncState?.((sync) => {
+      if (!cancelled) setInfo((current) => current ? { ...current, sync } : current);
+    });
+    const t = setInterval(load, 30_000);
     return () => {
       cancelled = true;
       clearInterval(t);
+      unsubscribe?.();
     };
   }, []);
   return info;

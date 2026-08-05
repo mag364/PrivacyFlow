@@ -300,6 +300,7 @@ const FIELD_LABELS: Record<string, string> = {
   verificationStatus: 'verification status',
   closureSummary: 'closure summary',
   resolutionDate: 'resolution date',
+  serviceNowUrl: 'ServiceNow link',
   subject: 'requester',
   intakeDates: 'intake timeline',
   sla: 'SLA',
@@ -312,6 +313,8 @@ const FIELD_LABELS: Record<string, string> = {
   investmentClass: 'investment class',
   fiscalYear: 'fiscal year',
   piaNumber: 'PIA number',
+  oneTrustProjectId: 'OneTrust project ID',
+  oneTrustUrl: 'OneTrust link',
   ssdsTask: 'SSDS task',
   ssdsType: 'SSDS type',
   projectUid: 'project UID',
@@ -1678,7 +1681,9 @@ export function createBrowserPlatform(): PrivacyFlowAPI {
         });
         if (changed) {
           const automationFields = changedAutomationFields(before, c);
-          await runAutomations(d, c, 'case.updated', { changedFields: automationFields });
+          if (automationFields.length) {
+            await runAutomations(d, c, 'case.updated', { changedFields: automationFields });
+          }
           const hadStandardResponse = !!before.intakeDates?.standardResponseSent;
           const hadForwardedToRon = !!before.intakeDates?.forwardedEmailToRon;
           const hadFollowUp = !!before.intakeDates?.followUpEmailSent;

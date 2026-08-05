@@ -369,8 +369,16 @@ interface WorkspaceSyncState {
 
 let syncState: WorkspaceSyncState = { mode: 'direct-shared', status: 'synced' };
 let syncTimer: NodeJS.Timeout | null = null;
+let syncInFlight: Promise<void> | null = null;
 let lastLocalJson: string | null = null;
 let refreshTimer: NodeJS.Timeout | null = null;
+
+function setSyncState(next: WorkspaceSyncState): void {
+  syncState = next;
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send('workspace:syncState', syncState);
+  }
+}
 
 function localWorkspaceCachePath(sharedPath = dbPath): string {
   const digest = crypto.createHash('sha1').update(path.resolve(sharedPath).toLowerCase()).digest('hex').slice(0, 16);
@@ -384,6 +392,18 @@ function writeAtomic(filePath: string, raw: string): void {
   const tmp = `${filePath}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, raw, 'utf8');
   fs.renameSync(tmp, filePath);
+}
+
+async function writeAtomicAsync(filePath: string, raw: string): Promise<void> {
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    await fs.promises.writeFile(tmp, raw, 'utf8');
+    await fs.promises.rename(tmp, filePath);
+  } catch (error) {
+    await fs.promises.rm(tmp, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 function isUserDataWorkspace(): boolean {
@@ -418,22 +438,22 @@ function initializeWorkspaceCache(): void {
   }
   lastLocalJson = null;
   if (lockState.mode !== 'write') {
-    syncState = { mode: 'read-only', status: 'read-only' };
+    setSyncState({ mode: 'read-only', status: 'read-only' });
     return;
   }
   if (isUserDataWorkspace()) {
-    syncState = { mode: 'direct-shared', status: 'synced' };
+    setSyncState({ mode: 'direct-shared', status: 'synced' });
     return;
   }
   const cachePath = localWorkspaceCachePath();
   const cached = fs.existsSync(cachePath) ? fs.readFileSync(cachePath, 'utf8') : null;
   if (cached) {
     lastLocalJson = cached;
-    syncState = {
+    setSyncState({
       mode: 'local-cache',
       status: 'pending',
       localCachePath: cachePath,
-    };
+    });
     refreshLocalCacheFromSharedLater(250);
     return;
   }
@@ -441,18 +461,18 @@ function initializeWorkspaceCache(): void {
   if (raw) {
     writeAtomic(cachePath, raw);
     lastLocalJson = raw;
-    syncState = {
+    setSyncState({
       mode: 'local-cache',
       status: 'synced',
       localCachePath: cachePath,
       lastSyncedAt: new Date().toISOString(),
-    };
+    });
   } else {
-    syncState = {
+    setSyncState({
       mode: 'local-cache',
       status: 'local-only',
       localCachePath: cachePath,
-    };
+    });
   }
 }
 
@@ -471,11 +491,11 @@ function refreshLocalCacheFromShared(): void {
     const cacheBefore = localRaw();
     const shared = sharedRaw();
     if (!shared) {
-      syncState = { ...syncState, status: cacheBefore ? 'synced' : 'local-only', lastError: undefined };
+      setSyncState({ ...syncState, status: cacheBefore ? 'synced' : 'local-only', lastError: undefined });
       return;
     }
     if (cacheBefore !== lastLocalJson) {
-      syncState = { ...syncState, status: 'pending', lastError: undefined };
+      setSyncState({ ...syncState, status: 'pending', lastError: undefined });
       scheduleSyncLocalCache();
       return;
     }
@@ -483,58 +503,71 @@ function refreshLocalCacheFromShared(): void {
       writeAtomic(syncState.localCachePath, shared);
       lastLocalJson = shared;
     }
-    syncState = {
+    setSyncState({
       ...syncState,
       status: 'synced',
       lastSyncedAt: new Date().toISOString(),
       lastError: undefined,
-    };
+    });
   } catch (e) {
-    syncState = {
+    setSyncState({
       ...syncState,
       status: 'failed',
       lastError: e instanceof Error ? e.message : 'Unable to refresh the local cache from the shared workspace.',
-    };
+    });
   }
 }
 
-function syncLocalCacheNow(): void {
-  if (syncState.mode !== 'local-cache' || lockState.mode !== 'write' || !syncState.localCachePath) return;
-  if (!fs.existsSync(syncState.localCachePath)) return;
-  const raw = fs.readFileSync(syncState.localCachePath, 'utf8');
-  JSON.parse(raw);
-  if (lastLocalJson === raw && syncState.status === 'synced') return;
-  syncState = { ...syncState, status: 'syncing', lastError: undefined };
-  try {
-    writeAtomic(dbPath, raw);
-    lastLocalJson = raw;
-    syncState = {
-      ...syncState,
-      status: 'synced',
-      lastSyncedAt: new Date().toISOString(),
-      lastError: undefined,
-    };
-  } catch (e) {
-    syncState = {
-      ...syncState,
-      status: 'failed',
-      lastError: e instanceof Error ? e.message : 'Unable to sync local cache to the shared workspace.',
-    };
-    throw e;
+async function performLocalCacheSync(): Promise<void> {
+  while (syncState.mode === 'local-cache' && lockState.mode === 'write' && syncState.localCachePath) {
+    if (!fs.existsSync(syncState.localCachePath)) return;
+    const raw = fs.readFileSync(syncState.localCachePath, 'utf8');
+    JSON.parse(raw);
+    if (lastLocalJson === raw && syncState.status === 'synced') return;
+    setSyncState({ ...syncState, status: 'syncing', lastError: undefined });
+    try {
+      await writeAtomicAsync(dbPath, raw);
+      lastLocalJson = raw;
+      const latest = localRaw();
+      if (latest !== raw) {
+        setSyncState({ ...syncState, status: 'pending', lastError: undefined });
+        continue;
+      }
+      setSyncState({
+        ...syncState,
+        status: 'synced',
+        lastSyncedAt: new Date().toISOString(),
+        lastError: undefined,
+      });
+      return;
+    } catch (e) {
+      setSyncState({
+        ...syncState,
+        status: 'failed',
+        lastError: e instanceof Error ? e.message : 'Unable to sync local cache to the shared workspace.',
+      });
+      throw e;
+    }
   }
+}
+
+function syncLocalCacheNow(): Promise<void> {
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = performLocalCacheSync().finally(() => {
+    syncInFlight = null;
+  });
+  return syncInFlight;
 }
 
 function scheduleSyncLocalCache(): void {
   if (syncState.mode !== 'local-cache' || lockState.mode !== 'write') return;
   if (syncTimer) clearTimeout(syncTimer);
-  syncState = { ...syncState, status: 'pending', lastError: undefined };
+  setSyncState({ ...syncState, status: 'pending', lastError: undefined });
   syncTimer = setTimeout(() => {
     syncTimer = null;
-    try {
-      syncLocalCacheNow();
-    } catch {
+    void syncLocalCacheNow().catch(() => {
       // The sync state records the error; the next write or close retries.
-    }
+    });
   }, SYNC_DEBOUNCE_MS);
   syncTimer.unref?.();
 }
@@ -652,7 +685,7 @@ function restoreBackup(fileName: string): { restored: BackupEntry; safetyBackup:
   if (syncState.mode === 'local-cache' && syncState.localCachePath) {
     writeAtomic(syncState.localCachePath, raw);
     lastLocalJson = null;
-    syncLocalCacheNow();
+    scheduleSyncLocalCache();
   } else {
     writeAtomic(dbPath, raw);
   }
@@ -911,7 +944,7 @@ ipcMain.handle('workspace:info', async () => {
 
 ipcMain.handle('workspace:syncNow', async () => {
   ensureWorkspaceReady();
-  syncLocalCacheNow();
+  await syncLocalCacheNow();
   return {
     dbPath,
     lockState,
@@ -937,7 +970,7 @@ ipcMain.handle('workspace:choosePath', async () => {
   if (nextPath === dbPath) return { dbPath, lockState, changed: false };
 
   try {
-    syncLocalCacheNow();
+    await syncLocalCacheNow();
   } catch {
     // Keep moving; the previous workspace local cache is retained for recovery.
   }
@@ -1040,7 +1073,7 @@ ipcMain.handle('updater:applyReleaseAsset', async (_e, input: { assetApiUrl?: st
     throw new Error(`Unable to start the updater handoff: ${openError}. Log: ${updater.logPath}`);
   }
   writeApplicationFolderPreference(info.folderPath);
-  flushAndReleaseLock();
+  await flushAndReleaseLock();
   setTimeout(() => app.quit(), 1200);
   return { filePath, appFolder: info.folderPath, updaterScriptPath: updater.scriptPath, mode: 'automatic' as const, message: `Updater log: ${updater.logPath}` };
 });
@@ -1306,24 +1339,35 @@ app.whenReady().then(() => {
   });
 });
 
-function flushAndReleaseLock(): void {
-  if (!workspaceReady) return;
-  try {
+let shutdownPromise: Promise<void> | null = null;
+let lockReleased = false;
+
+function flushAndReleaseLock(): Promise<void> {
+  if (!workspaceReady || lockReleased) return Promise.resolve();
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
     if (syncTimer) {
       clearTimeout(syncTimer);
       syncTimer = null;
     }
-    syncLocalCacheNow();
-  } catch {
-    // Local cache remains on disk; do not prevent app shutdown.
-  } finally {
-    lock.release();
-  }
+    try {
+      await syncLocalCacheNow();
+    } catch {
+      // Local cache remains on disk; do not prevent app shutdown.
+    } finally {
+      lock.release();
+      lockReleased = true;
+    }
+  })();
+  return shutdownPromise;
 }
 
 app.on('window-all-closed', () => {
-  flushAndReleaseLock();
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') void flushAndReleaseLock().finally(() => app.quit());
 });
 
-app.on('before-quit', () => flushAndReleaseLock());
+app.on('before-quit', (event) => {
+  if (!workspaceReady || lockReleased) return;
+  event.preventDefault();
+  void flushAndReleaseLock().finally(() => app.quit());
+});

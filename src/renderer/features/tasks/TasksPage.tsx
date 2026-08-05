@@ -168,6 +168,14 @@ export function TasksPage() {
     return Array.from(new Set(g.children.map((c) => c.source)));
   }
 
+  function parentOneTrustProjectIds(g: ProjectGroup): string[] {
+    return Array.from(new Set(
+      g.children
+        .map((c) => c.oneTrustProjectId?.trim())
+        .filter((id): id is string => Boolean(id)),
+    ));
+  }
+
   function parentNumber(g: ProjectGroup): string {
     const distinct = Array.from(new Set(g.children.map((c) => c.projectNumber)));
     return distinct.length === 1 ? distinct[0] : `${distinct.length} numbers`;
@@ -326,7 +334,7 @@ export function TasksPage() {
                 <th className="px-4 py-3">Project Name</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">RITM Number</th>
-                <th className="px-4 py-3">Source Information</th>
+                <th className="px-4 py-3">OneTrust Project ID</th>
                 <th className="px-4 py-3">Date Notification Rec'd</th>
               </tr>
             </thead>
@@ -344,7 +352,7 @@ export function TasksPage() {
                       <td className="px-4 py-3 font-medium text-ink">{p.projectName}</td>
                       <td className="px-4 py-3"><GlassBadge tone={statusTone(p.status)}>{p.status}</GlassBadge></td>
                       <td className="px-4 py-3 text-ink/90">{p.ritmNumber ?? '—'}</td>
-                      <td className="px-4 py-3 text-ink/90">{p.source}</td>
+                      <td className="px-4 py-3 text-ink/90">{p.oneTrustProjectId ?? '—'}</td>
                       <td className="px-4 py-3 text-ink/90">{displayDate(p)}</td>
                     </tr>
                   );
@@ -373,7 +381,7 @@ export function TasksPage() {
                       </td>
                       <td className="px-4 py-3 text-muted">Grouped</td>
                       <td className="px-4 py-3 text-muted">—</td>
-                      <td className="px-4 py-3 text-muted">{parentSources(g).join(', ')}</td>
+                      <td className="px-4 py-3 text-muted">{parentOneTrustProjectIds(g).join(', ') || '—'}</td>
                       <td className="px-4 py-3 text-muted">{parentDate(g)}</td>
                     </tr>
                     {!isCollapsed &&
@@ -387,7 +395,7 @@ export function TasksPage() {
                           <td className="px-4 py-3 text-ink/80">{p.projectName}</td>
                           <td className="px-4 py-3"><GlassBadge tone={statusTone(p.status)}>{p.status}</GlassBadge></td>
                           <td className="px-4 py-3 text-ink/90">{p.ritmNumber ?? '—'}</td>
-                          <td className="px-4 py-3 text-ink/90">{p.source}</td>
+                          <td className="px-4 py-3 text-ink/90">{p.oneTrustProjectId ?? '—'}</td>
                           <td className="px-4 py-3 text-ink/90">{displayDate(p)}</td>
                         </tr>
                       ))}

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import clsx from 'clsx';
 import {
   ArrowLeft, ClipboardList, MessageSquare, ShieldCheck, Paperclip,
-  Pencil, Check, X, Save, ExternalLink,
+  Pencil, Check, X, Save, ExternalLink, Plus,
 } from 'lucide-react';
 import { platform } from '../../platform';
 import type { Project, AuditEvent, Communication, NoteTemplate } from '@shared/types';
@@ -17,6 +17,7 @@ import { fmtDate, fmtDateTime, statusTone } from '../../lib/format';
 import { useAuth, can } from '../../store/auth';
 import { insertTextAtCursor } from '../../lib/textInsert';
 import { isWebUrl, openExternalUrl } from '../../platform/workspace';
+import { appendProjectComment } from '../../lib/projectComments';
 
 type TabKey = 'overview' | 'communications' | 'comments' | 'audit';
 
@@ -48,6 +49,13 @@ export function ProjectDetailPage() {
   const [commentTemplates, setCommentTemplates] = React.useState<NoteTemplate[]>([]);
   const [orgName, setOrgName] = React.useState('');
   const commentsRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  // Append-only comment form on the Comments tab
+  const [addingComment, setAddingComment] = React.useState(false);
+  const [commentText, setCommentText] = React.useState('');
+  const [commentError, setCommentError] = React.useState('');
+  const [commentBusy, setCommentBusy] = React.useState(false);
+  const newCommentRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   // Workflow status change
   const [statusReason, setStatusReason] = React.useState('');
@@ -204,6 +212,37 @@ export function ProjectDetailPage() {
         comments: insertTextAtCursor(commentsRef.current, current.comments ?? '', body),
       };
     });
+  }
+
+  function insertNewCommentTemplate(template: NoteTemplate) {
+    const body = replacePlaceholders(template.body, projectPlaceholderValues(p, orgName));
+    setCommentText((current) => insertTextAtCursor(newCommentRef.current, current, body));
+  }
+
+  async function submitComment(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!commentText.trim()) {
+      setCommentError('Enter a comment.');
+      return;
+    }
+    setCommentBusy(true);
+    setCommentError('');
+    try {
+      const actor = user?.name || user?.username || 'User';
+      const timestamp = new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      }).format(new Date());
+      await platform().projects.update(id, {
+        comments: appendProjectComment(p.comments, commentText, actor, timestamp),
+      }, 'Added a comment');
+      setCommentText('');
+      setAddingComment(false);
+      await load();
+    } catch (e) {
+      setCommentError(e instanceof Error ? e.message : 'Unable to add the comment.');
+    } finally {
+      setCommentBusy(false);
+    }
   }
 
   return (
@@ -498,15 +537,55 @@ export function ProjectDetailPage() {
 
           {tab === 'comments' && (
             <GlassPanel>
-              <h3 className="mb-3 text-sm font-semibold text-ink">Comments</h3>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-ink">Comments</h3>
+                {canEdit && !addingComment && (
+                  <GlassButton variant="primary" className="px-3 py-1.5 text-xs" onClick={() => { setAddingComment(true); setCommentError(''); }}>
+                    <Plus className="h-3.5 w-3.5" /> Add Comment
+                  </GlassButton>
+                )}
+              </div>
+              {addingComment && canEdit && (
+                <form onSubmit={submitComment} className="mb-4 flex flex-col gap-3 rounded-xl border border-accent/40 bg-[var(--pf-surface)] p-4">
+                  <Field label="New comment">
+                    <GlassTextarea
+                      ref={newCommentRef}
+                      rows={4}
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      autoFocus
+                    />
+                  </Field>
+                  {commentTemplates.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Insert</span>
+                      {commentTemplates.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => insertNewCommentTemplate(template)}
+                          className="rounded-capsule border border-line px-2.5 py-1 text-xs text-muted hover:text-ink focus-ring"
+                        >
+                          {template.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {commentError && <p className="text-xs text-red-400">{commentError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <GlassButton type="button" onClick={() => { setAddingComment(false); setCommentText(''); setCommentError(''); }}>Cancel</GlassButton>
+                    <GlassButton type="submit" variant="primary" loading={commentBusy}>Add Comment</GlassButton>
+                  </div>
+                </form>
+              )}
               {p.comments?.trim() ? (
                 <div className="rounded-xl border border-line px-4 py-3">
-                  <p className="text-sm text-ink/90">{p.comments}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm text-ink/90">{p.comments}</p>
                 </div>
               ) : (
                 <EmptyState
                   title="No comments"
-                  description="Comments added when the data notification was logged will appear here. Edit the record on the Overview tab to add one."
+                  description="Comments added to this data notification will appear here."
                   icon={<MessageSquare className="h-6 w-6" />}
                 />
               )}

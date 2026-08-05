@@ -617,8 +617,6 @@ export function ProjectDetailPage() {
             <dl className="flex flex-col gap-2 text-sm">
               <Row k="Status" v={p.status} />
               <Row k="Source" v={p.source} />
-              <Row k="Investment Class" v={p.investmentClass} />
-              <Row k="Business Unit" v={p.businessUnit ?? '—'} />
               <Row k="Logged" v={fmtDate(p.createdAt)} />
             </dl>
           </GlassPanel>

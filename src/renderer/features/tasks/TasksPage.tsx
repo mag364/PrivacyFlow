@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Download, FolderPlus, ListChecks, CalendarDays, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Layers } from 'lucide-react';
+import { Search, Download, FolderPlus, ListChecks, CalendarDays, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Layers } from 'lucide-react';
 import { platform } from '../../platform';
 import type { Project } from '@shared/types';
 import { PROJECT_STATUSES } from '@shared/constants';
@@ -10,6 +10,7 @@ import { fmtDate, statusTone } from '../../lib/format';
 import { downloadXlsx, type XlsxRow } from '../../lib/xlsx';
 import { readLastYear, writeLastYear, clearLastYear } from '../../lib/lastYear';
 import { useAuth, can } from '../../store/auth';
+import { isWebUrl, openExternalUrl } from '../../platform/workspace';
 
 const SOURCES = ['DD', 'SSDS', 'Lighthouse'];
 const PAGE_SIZE = 15;
@@ -33,6 +34,25 @@ function readFilters(): { q: string; source: string; statusFilter: string; sort:
 function displayDate(p: Project): string {
   if (p.notificationCancelled) return 'Cancelled';
   return fmtDate(p.dateNotificationReceived);
+}
+
+function OneTrustProjectLink({ id, url }: { id?: string; url?: string }) {
+  const projectId = id?.trim();
+  if (!projectId) return <>—</>;
+  if (!url || !isWebUrl(url)) return <>{projectId}</>;
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 text-accent hover:underline focus-ring"
+      onClick={(event) => {
+        event.stopPropagation();
+        void openExternalUrl(url);
+      }}
+      title="Open this project in OneTrust"
+    >
+      {projectId} <ExternalLink className="h-3.5 w-3.5" />
+    </button>
+  );
 }
 
 function normalizedGroupValue(value: string): string {
@@ -352,13 +372,16 @@ export function TasksPage() {
                       <td className="px-4 py-3 font-medium text-ink">{p.projectName}</td>
                       <td className="px-4 py-3"><GlassBadge tone={statusTone(p.status)}>{p.status}</GlassBadge></td>
                       <td className="px-4 py-3 text-ink/90">{p.ritmNumber ?? '—'}</td>
-                      <td className="px-4 py-3 text-ink/90">{p.oneTrustProjectId ?? '—'}</td>
+                      <td className="px-4 py-3 text-ink/90">
+                        <OneTrustProjectLink id={p.oneTrustProjectId} url={p.oneTrustUrl} />
+                      </td>
                       <td className="px-4 py-3 text-ink/90">{displayDate(p)}</td>
                     </tr>
                   );
                 }
 
                 const isCollapsed = isGroupCollapsed(g.key);
+                const oneTrustProjectIds = parentOneTrustProjectIds(g);
                 return (
                   <React.Fragment key={g.key}>
                     <tr
@@ -381,7 +404,19 @@ export function TasksPage() {
                       </td>
                       <td className="px-4 py-3 text-muted">Grouped</td>
                       <td className="px-4 py-3 text-muted">—</td>
-                      <td className="px-4 py-3 text-muted">{parentOneTrustProjectIds(g).join(', ') || '—'}</td>
+                      <td className="px-4 py-3 text-muted">
+                        {oneTrustProjectIds.map((projectId, index) => {
+                          const linkedProject = g.children.find((child) =>
+                            child.oneTrustProjectId?.trim() === projectId && child.oneTrustUrl && isWebUrl(child.oneTrustUrl));
+                          return (
+                            <React.Fragment key={projectId}>
+                              {index > 0 && ', '}
+                              <OneTrustProjectLink id={projectId} url={linkedProject?.oneTrustUrl} />
+                            </React.Fragment>
+                          );
+                        })}
+                        {oneTrustProjectIds.length === 0 && '—'}
+                      </td>
                       <td className="px-4 py-3 text-muted">{parentDate(g)}</td>
                     </tr>
                     {!isCollapsed &&
@@ -395,7 +430,9 @@ export function TasksPage() {
                           <td className="px-4 py-3 text-ink/80">{p.projectName}</td>
                           <td className="px-4 py-3"><GlassBadge tone={statusTone(p.status)}>{p.status}</GlassBadge></td>
                           <td className="px-4 py-3 text-ink/90">{p.ritmNumber ?? '—'}</td>
-                          <td className="px-4 py-3 text-ink/90">{p.oneTrustProjectId ?? '—'}</td>
+                          <td className="px-4 py-3 text-ink/90">
+                            <OneTrustProjectLink id={p.oneTrustProjectId} url={p.oneTrustUrl} />
+                          </td>
                           <td className="px-4 py-3 text-ink/90">{displayDate(p)}</td>
                         </tr>
                       ))}

@@ -19,7 +19,6 @@ export function NewCasePage() {
   const { user } = useAuth();
   const [busy, setBusy] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [requestIdPrefix, setRequestIdPrefix] = React.useState('');
   const [orgName, setOrgName] = React.useState('');
   const [existingCases, setExistingCases] = React.useState<DsrCase[]>([]);
 
@@ -50,7 +49,6 @@ export function NewCasePage() {
   React.useEffect(() => {
     platform().cases.list().then(setExistingCases).catch(() => setExistingCases([]));
     platform().system.settings().then((settings) => {
-      setRequestIdPrefix(settings.caseNumberPrefix);
       setOrgName(settings.organizationName);
       setDescriptionTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'description'));
     });
@@ -81,9 +79,6 @@ export function NewCasePage() {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (requestId.trim() && requestIdPrefix && !requestId.trim().startsWith(requestIdPrefix)) {
-      e.requestId = `Must start with ${requestIdPrefix}`;
-    }
     if (!lastName.trim()) e.lastName = 'Required';
     if (!email.trim() || !/.+@.+\..+/.test(email)) e.email = 'Valid email required';
     if (requestTypes.length === 0) e.requestTypes = 'Select at least one request type';
@@ -219,7 +214,7 @@ export function NewCasePage() {
                 <GlassInput
                   value={requestId}
                   onChange={(e) => setRequestId(e.target.value)}
-                  placeholder={requestIdPrefix ? `e.g. ${requestIdPrefix}0000001` : 'e.g. PH-0000001'}
+                  placeholder="e.g. ABC-0000001"
                 />
               </Field>
               <Field label="Last name" error={errors.lastName}>

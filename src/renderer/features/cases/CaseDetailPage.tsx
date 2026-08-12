@@ -478,7 +478,7 @@ export function CaseDetailPage() {
               </div>
               {numberError
                 ? <p className="text-xs text-red-400">{numberError}</p>
-                : <p className="text-xs text-muted">Enter the PH Request ID.</p>}
+                : <p className="text-xs text-muted">Enter the Request ID.</p>}
             </div>
           ) : (
             <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-ink">

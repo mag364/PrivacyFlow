@@ -19,6 +19,7 @@ export function NewCasePage() {
   const { user } = useAuth();
   const [busy, setBusy] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [requestIdPrefix, setRequestIdPrefix] = React.useState('PH-');
   const [orgName, setOrgName] = React.useState('');
   const [existingCases, setExistingCases] = React.useState<DsrCase[]>([]);
 
@@ -49,6 +50,7 @@ export function NewCasePage() {
   React.useEffect(() => {
     platform().cases.list().then(setExistingCases).catch(() => setExistingCases([]));
     platform().system.settings().then((settings) => {
+      setRequestIdPrefix(settings.caseNumberPrefix);
       setOrgName(settings.organizationName);
       setDescriptionTemplates((settings.noteTemplates ?? []).filter((template) => template.target === 'description'));
     });
@@ -214,7 +216,7 @@ export function NewCasePage() {
                 <GlassInput
                   value={requestId}
                   onChange={(e) => setRequestId(e.target.value)}
-                  placeholder="e.g. ABC-0000001"
+                  placeholder={`e.g. ${requestIdPrefix}0000000`}
                 />
               </Field>
               <Field label="Last name" error={errors.lastName}>

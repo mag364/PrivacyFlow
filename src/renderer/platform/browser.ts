@@ -1,3 +1,4 @@
+import { resolveAutomationCc } from '@shared/emailRecipients';
 import { computeMetrics } from './dashboardMetrics';
 import { addDays, parseISO } from 'date-fns';
 import type {
@@ -548,19 +549,29 @@ async function runAutomations(
     const graph = m365?.mode === 'graph' ? graphBridge() : null;
     const outlook = m365?.mode === 'outlook' ? outlookBridge() : null;
     const fallbackDraft = m365?.mode === 'outlook' || m365?.mode === 'graph' || m365?.mode === 'mailto' ? mailBridge() : null;
+    let cc = '';
+    let ccError = '';
+    try {
+      cc = resolveAutomationCc(tpl.cc, settings.automationRecipients ?? [], recipient);
+    } catch (error) {
+      ccError = error instanceof Error ? error.message : 'Invalid Cc recipients.';
+    }
     let deliveryNote = '';
     let deliveryStatus = 'Logged only';
 
-    if (m365?.mode === 'graph' && /.+@.+\..+/.test(recipient)) {
+    if (ccError) {
+      deliveryStatus = 'Draft not opened';
+      deliveryNote = `\n\n${ccError}`;
+    } else if (m365?.mode === 'graph' && /.+@.+\..+/.test(recipient)) {
       try {
         const accessToken = await graphAccessToken(d);
         if (!graph || !accessToken) throw new Error('Microsoft Graph connection is unavailable.');
-        await graph.sendMail({ accessToken, to: recipient, subject, body, saveToSentItems: true });
+        await graph.sendMail({ accessToken, to: recipient, cc: cc || undefined, subject, body, saveToSentItems: true });
         deliveryStatus = 'Sent with Microsoft Graph';
       } catch (e) {
         if (fallbackDraft) {
           try {
-            await fallbackDraft.openDraft({ to: recipient, subject, body });
+            await fallbackDraft.openDraft({ to: recipient, cc: cc || undefined, subject, body });
             deliveryStatus = 'Draft opened in default mail app';
             deliveryNote = `\n\nMicrosoft Graph send failed, so PrivacyFlow opened a mail draft instead: ${e instanceof Error ? e.message : 'Graph send failed.'}`;
           } catch {
@@ -575,11 +586,11 @@ async function runAutomations(
     } else if ((m365?.mode === 'outlook' || m365?.mode === 'mailto') && /.+@.+\..+/.test(recipient)) {
       try {
         if (m365.mode === 'outlook' && outlook) {
-          const opened = await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, subject, body });
+          const opened = await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, cc: cc || undefined, subject, body });
           if (!opened) throw new Error('Outlook did not confirm that the draft window opened.');
           deliveryStatus = 'Draft opened in Outlook';
         } else if (fallbackDraft) {
-          await fallbackDraft.openDraft({ to: recipient, subject, body });
+          await fallbackDraft.openDraft({ to: recipient, cc: cc || undefined, subject, body });
           deliveryStatus = 'Draft opened in default mail app';
           deliveryNote = '\n\nOpened with the default mail app because local Outlook automation was unavailable.';
         } else {
@@ -606,7 +617,7 @@ async function runAutomations(
       direction: 'Outbound',
       channel: viaM365 ? 'Email (Microsoft 365)' : 'Email',
       subject,
-      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipientLabel}${deliveryNote}\n\n${body}`,
+      summary: `[Automated · ${rule.name}]${sender ? ` From: ${sender}` : ''} To: ${recipientLabel}${cc ? ` Cc: ${cc}` : ''}${deliveryNote}\n\n${body}`,
       sentAt: now,
       status: deliveryStatus,
       createdBy: 'automation',
@@ -620,7 +631,7 @@ async function runAutomations(
       entityId: c.id,
       caseId: c.id,
       summary: `Automated email "${tpl.name}" ${deliveryStatus.toLowerCase()} for ${recipientLabel} (${rule.name})${sender ? ` via ${sender}` : ''}`,
-      newValue: { rule: rule.name, template: tpl.name, recipient: recipientLabel, subject, status: deliveryStatus, via: sender ?? 'local log' },
+      newValue: { rule: rule.name, template: tpl.name, recipient: recipientLabel, cc: cc || undefined, subject, status: deliveryStatus, via: sender ?? 'local log' },
     });
   }
 }

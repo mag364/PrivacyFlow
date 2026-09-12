@@ -284,6 +284,7 @@ export interface EmailTemplate {
   subject: string;
   body: string;
   audience: 'requester' | 'department';
+  cc?: string;
   department?: string;
 }
 

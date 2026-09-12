@@ -1,3 +1,4 @@
+import { parseCcAddresses } from '../src/shared/emailRecipients';
 // -----------------------------------------------------------------------------
 // Electron main process (desktop build).
 //
@@ -1078,12 +1079,13 @@ ipcMain.handle('updater:applyReleaseAsset', async (_e, input: { assetApiUrl?: st
   return { filePath, appFolder: info.folderPath, updaterScriptPath: updater.scriptPath, mode: 'automatic' as const, message: `Updater log: ${updater.logPath}` };
 });
 
-ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; subject?: string; body?: string }) => {
+ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; cc?: string; subject?: string; body?: string }) => {
   const to = String(input?.to || '').trim();
+  const cc = parseCcAddresses(input?.cc);
   if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
   const subject = encodeURIComponent(String(input?.subject || ''));
   const body = encodeURIComponent(String(input?.body || ''));
-  const url = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}`;
+  const url = `mailto:${encodeURIComponent(to)}?subject=${subject}&body=${body}${cc.length ? `&cc=${encodeURIComponent(cc.join(','))}` : ''}`;
   return shell.openExternal(url);
 });
 
@@ -1195,9 +1197,10 @@ ipcMain.handle('graph:profile', async (_e, input: { accessToken?: string }) => {
   return json;
 });
 
-ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: string; subject?: string; body?: string; saveToSentItems?: boolean }) => {
+ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: string; cc?: string; subject?: string; body?: string; saveToSentItems?: boolean }) => {
   const accessToken = String(input?.accessToken || '').trim();
   const to = String(input?.to || '').trim();
+  const cc = parseCcAddresses(input?.cc);
   if (!accessToken) throw new Error('Microsoft Graph access token is unavailable.');
   if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
   const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
@@ -1214,6 +1217,7 @@ ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: 
           content: String(input?.body || ''),
         },
         toRecipients: [{ emailAddress: { address: to } }],
+        ccRecipients: cc.map(address => ({ emailAddress: { address } })),
       },
       saveToSentItems: input?.saveToSentItems ?? true,
     }),
@@ -1269,14 +1273,16 @@ $accounts | ConvertTo-Json -Compress
   return Array.isArray(parsed) ? parsed : [parsed];
 });
 
-ipcMain.handle('outlook:openDraft', async (_e, input: { accountEmail?: string; to?: string; subject?: string; body?: string }) => {
+ipcMain.handle('outlook:openDraft', async (_e, input: { accountEmail?: string; to?: string; cc?: string; subject?: string; body?: string }) => {
   const successMarker = 'PRIVACYFLOW_DRAFT_OPENED';
   const accountEmail = String(input?.accountEmail || '').trim();
   const to = String(input?.to || '').trim();
+  const cc = parseCcAddresses(input?.cc);
   if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
   const payload = Buffer.from(JSON.stringify({
     accountEmail,
     to,
+    cc: cc.join('; '),
     subject: String(input?.subject || ''),
     body: String(input?.body || ''),
   }), 'utf8').toString('base64');
@@ -1301,6 +1307,7 @@ if ($input.accountEmail) {
   }
 }
 $mail.To = [string]$input.to
+$mail.CC = [string]$input.cc
 $mail.Subject = [string]$input.subject
 $mail.Body = [string]$input.body
 $mail.Display($false)

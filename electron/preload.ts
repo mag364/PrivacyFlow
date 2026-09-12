@@ -50,7 +50,7 @@ contextBridge.exposeInMainWorld('privacyflow', {
     delete: (input: { fileName: string }) => ipcRenderer.invoke('backup:delete', input),
   },
   mail: {
-    openDraft: (input: { to: string; subject: string; body: string }) => ipcRenderer.invoke('mail:openDraft', input),
+    openDraft: (input: { to: string; cc?: string; subject: string; body: string }) => ipcRenderer.invoke('mail:openDraft', input),
   },
   external: {
     open: (url: string) => ipcRenderer.invoke('external:open', url),
@@ -62,12 +62,12 @@ contextBridge.exposeInMainWorld('privacyflow', {
     refreshToken: (input: { clientId: string; refreshToken: string; scopes?: string[] }) =>
       ipcRenderer.invoke('graph:refreshToken', input),
     profile: (input: { accessToken: string }) => ipcRenderer.invoke('graph:profile', input),
-    sendMail: (input: { accessToken: string; to: string; subject: string; body: string; saveToSentItems?: boolean }) =>
+    sendMail: (input: { accessToken: string; to: string; cc?: string; subject: string; body: string; saveToSentItems?: boolean }) =>
       ipcRenderer.invoke('graph:sendMail', input),
   },
   outlook: {
     accounts: () => ipcRenderer.invoke('outlook:accounts'),
-    openDraft: (input: { accountEmail?: string; to: string; subject: string; body: string }) =>
+    openDraft: (input: { accountEmail?: string; to: string; cc?: string; subject: string; body: string }) =>
       ipcRenderer.invoke('outlook:openDraft', input),
   },
   windowControls: {

@@ -70,6 +70,7 @@ function parseTemplate(value: unknown, index: number): EmailTemplate {
     body: stringValue(value.body, `Email template ${index + 1} body`),
     audience,
     department: optionalString(value.department, `Email template ${index + 1} department`),
+    cc: optionalString(value.cc, `Email template ${index + 1} Cc`),
   };
 }
 

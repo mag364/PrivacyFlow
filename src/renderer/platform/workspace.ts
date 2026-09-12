@@ -121,6 +121,7 @@ export interface BackupBridge {
 
 export interface MailDraftInput {
   to: string;
+  cc?: string;
   subject: string;
   body: string;
 }
@@ -159,6 +160,7 @@ export interface M365Profile {
 export interface M365SendMailInput {
   accessToken: string;
   to: string;
+  cc?: string;
   subject: string;
   body: string;
   saveToSentItems?: boolean;

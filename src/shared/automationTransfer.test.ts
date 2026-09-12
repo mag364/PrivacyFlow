@@ -27,6 +27,13 @@ describe('automation transfers', () => {
     expect(serialized).not.toContain('secret-refresh-token');
   });
 
+  it('preserves template Cc in personal automation exports and imports', () => {
+    const file = createAutomationTransfer({ ...settings, emailTemplates: [
+      { ...settings.emailTemplates[0], cc: 'Ron K.; team@example.com' },
+    ] });
+    expect(parseAutomationTransfer(JSON.stringify(file)).emailTemplates[0].cc).toBe('Ron K.; team@example.com');
+  });
+
   it('rejects rules that refer to missing templates', () => {
     const file = createAutomationTransfer(settings);
     file.data.emailTemplates = [];

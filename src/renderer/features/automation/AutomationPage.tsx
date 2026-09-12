@@ -1,3 +1,4 @@
+import { resolveAutomationCc } from '@shared/emailRecipients';
 import React from 'react';
 import {
   Mail, Zap, Save, Check, Plus, Trash2, Pencil, Users, ChevronDown, ChevronRight,
@@ -55,6 +56,12 @@ export function AutomationPage() {
 
   if (!settings) return <Spinner label="Loading automation settings…" />;
 
+  let ccError = '';
+  try {
+    resolveAutomationCc(editingTemplate?.cc, settings.automationRecipients);
+  } catch (error) {
+    ccError = error instanceof Error ? error.message : 'Invalid Cc recipients.';
+  }
   const editable = !!user;
 
   function patch(p: Partial<OrgSettings>) {
@@ -254,6 +261,7 @@ export function AutomationPage() {
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted">Subject: {t.subject}</p>
+                {t.cc && <p className="mt-1 break-words text-xs text-muted">Cc: {t.cc}</p>}
               </div>
             ))}
             {settings.emailTemplates.length === 0 && (
@@ -290,6 +298,18 @@ export function AutomationPage() {
                   </Field>
                 )}
               </div>
+              <Field label="Cc" error={ccError}>
+                <GlassInput value={editingTemplate.cc ?? ''} onChange={(e) => setEditingTemplate({ ...editingTemplate, cc: e.target.value })} placeholder="person@example.com; department@example.com" />
+                <p className="mt-1 text-xs text-muted">Separate email addresses or names from Recipients with semicolons. Optional.</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {settings.automationRecipients.filter(r => r.enabled && r.email.trim()).map(r => (
+                    <button key={r.id} type="button" className="rounded-lg border border-line px-2 py-1 text-xs text-muted hover:text-ink focus-ring"
+                      onClick={() => setEditingTemplate({ ...editingTemplate, cc: [editingTemplate.cc?.trim(), r.name].filter(Boolean).join('; ') })}>
+                      + {r.name}
+                    </button>
+                  ))}
+                </div>
+              </Field>
               <Field label="Subject">
                 <GlassInput value={editingTemplate.subject} onChange={(e) => setEditingTemplate({ ...editingTemplate, subject: e.target.value })} />
               </Field>
@@ -319,7 +339,7 @@ export function AutomationPage() {
               </div>
               <div className="flex justify-end gap-2">
                 <GlassButton onClick={() => setEditingTemplate(null)}>Cancel</GlassButton>
-                <GlassButton variant="primary" onClick={() => saveTemplate(editingTemplate)} disabled={!editingTemplate.name.trim() || !editingTemplate.subject.trim()}>
+                <GlassButton variant="primary" onClick={() => saveTemplate(editingTemplate)} disabled={!!ccError || !editingTemplate.name.trim() || !editingTemplate.subject.trim()}>
                   Save template
                 </GlassButton>
               </div>

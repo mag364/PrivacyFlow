@@ -343,7 +343,7 @@ export function ProjectDetailPage() {
                 <>
                   <GlassPanel>
                     <h3 className="mb-2 text-sm font-semibold text-ink">Request Description/Explanation</h3>
-                    <p className="text-sm text-muted">{p.description}</p>
+                    <p className="whitespace-pre-wrap break-words text-sm text-muted [overflow-wrap:anywhere]">{p.description}</p>
                   </GlassPanel>
 
                   <GlassPanel>

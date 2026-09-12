@@ -544,7 +544,7 @@ export function CaseDetailPage() {
                 <>
                   <GlassPanel>
                     <h3 className="mb-2 text-sm font-semibold text-ink">Request description</h3>
-                    <p className="text-sm text-muted">{c.description}</p>
+                    <p className="whitespace-pre-wrap break-words text-sm text-muted [overflow-wrap:anywhere]">{c.description}</p>
                   </GlassPanel>
                   <GlassPanel>
                     <h3 className="mb-3 text-sm font-semibold text-ink">Details</h3>

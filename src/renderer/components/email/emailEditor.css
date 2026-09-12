@@ -10,3 +10,14 @@
 .pf-email-editor .ql-tooltip { z-index: 10; }
 .pf-editor-button { padding: 5px 9px; border: 1px solid var(--pf-line, #334155); border-radius: 7px; font-size: 12px; }
 .pf-editor-button:disabled { opacity: .4; }
+
+.pf-email-editor .pf-email-source {
+  background-color: var(--pf-surface-solid);
+  color: var(--pf-text);
+  caret-color: var(--pf-text);
+  line-height: 1.6;
+}
+.pf-email-editor .pf-email-source::selection {
+  background-color: var(--pf-accent);
+  color: var(--pf-accent-fg);
+}

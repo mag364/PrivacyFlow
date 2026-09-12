@@ -113,7 +113,7 @@ export const EmailBodyEditor = forwardRef<EmailBodyEditorHandle, { value: string
       <button type="button" className="pf-editor-button" onClick={toggleSource} aria-pressed={source}>{source ? 'Visual editor' : '</> HTML source'}</button>
     </div>
     <div ref={host} hidden={source} />
-    {source && <textarea ref={sourceInput} aria-label="Email HTML source" className="min-h-[260px] w-full rounded-lg border border-line bg-surface p-3 font-mono text-sm text-ink" value={code} onChange={e => { setCode(e.target.value); change.current(e.target.value); }} />}
+    {source && <textarea ref={sourceInput} aria-label="Email HTML source" className="pf-email-source min-h-[260px] w-full rounded-lg border border-line p-3 font-mono text-sm" value={code} onChange={e => { setCode(e.target.value); change.current(e.target.value); }} />}
     <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif" className="hidden" aria-label="Upload email image" onChange={e => { void addImage(e.target.files?.[0]); e.target.value = ''; }} />
     {error && <p role="alert" className="mt-2 text-sm text-red-400">{error}</p>}
     <p className="mt-2 text-xs text-muted">Insert PNG, JPEG, or GIF images up to 2 MB each. Uploaded images are embedded in Outlook drafts. HTML source supports email formatting; scripts and unsupported content are removed.</p>

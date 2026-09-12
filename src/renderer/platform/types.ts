@@ -27,6 +27,7 @@ export interface DashboardMetrics {
   byType: NameValue[];
   byJurisdiction: NameValue[];
   byStatus: NameValue[];
+  // Request-type counts use date received in the current month, regardless of status.
   accessCount: number;
   deletionCount: number;
   correctionCount: number;

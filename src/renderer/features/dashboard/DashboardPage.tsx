@@ -86,9 +86,9 @@ export function DashboardPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <Metric icon={<FolderOpen className="h-4 w-4" />} label="Open DSR requests" value={metrics.openCases} tone="info" />
-        <Metric icon={<Trash2 className="h-4 w-4" />} label="Deletions" value={metrics.deletionCount} tone="danger" />
-        <Metric icon={<BellOff className="h-4 w-4" />} label="Unsubscribe" value={metrics.unsubscribeCount} tone="warn" />
-        <Metric icon={<Ban className="h-4 w-4" />} label="Do Not Sell" value={metrics.doNotSaleCount} tone="danger" />
+        <Metric icon={<Trash2 className="h-4 w-4" />} label="Deletions this month" value={metrics.deletionCount} tone="danger" />
+        <Metric icon={<BellOff className="h-4 w-4" />} label="Unsubscribe this month" value={metrics.unsubscribeCount} tone="warn" />
+        <Metric icon={<Ban className="h-4 w-4" />} label="Do Not Sell this month" value={metrics.doNotSaleCount} tone="danger" />
         <Metric icon={<FolderPlus className="h-4 w-4" />} label="Total data notifications" value={metrics.totalProjects} tone="info" />
         <Metric icon={<ClipboardList className="h-4 w-4" />} label="Active data notifications" value={metrics.activeProjects} tone="warn" />
         <Metric icon={<Inbox className="h-4 w-4" />} label="Data notifications this month" value={metrics.projectsThisMonth} tone="info" />

@@ -1,4 +1,5 @@
-import { addDays, isSameMonth, parseISO } from 'date-fns';
+import { computeMetrics } from './dashboardMetrics';
+import { addDays, parseISO } from 'date-fns';
 import type {
   DsrCase, AuditEvent, IntegrityReport, OrgSettings, CaseNote, SlaInfo, Project, SlaRule,
   EmailTemplate, AutomationRule, AutomationTrigger, AutomationRecipient, User, CaseDocument, Communication,
@@ -14,8 +15,8 @@ import { computeDueDate } from '@shared/sla';
 import { verifyChain } from '@shared/audit';
 import { generateTempPassword, hashPassword, PASSWORD_MIN_LENGTH } from '@shared/password';
 import type {
-  PrivacyFlowAPI, DashboardMetrics, NewCaseInput, NewProjectInput, CompleteSetupInput,
-  LoginResult, NameValue, CreateUserInput, CreateUserResult, UpdateUserInput,
+  PrivacyFlowAPI, NewCaseInput, NewProjectInput, CompleteSetupInput,
+  LoginResult, CreateUserInput, CreateUserResult, UpdateUserInput,
   AddDocumentInput, AddCommunicationInput, ImportSummary, RetentionCleanupSummary, RetentionCleanupOptions,
 } from './types';
 import {
@@ -883,58 +884,6 @@ async function verifyCredentials(d: Db, username: string, password: string): Pro
   // which intentionally accepts any password in this preview until a real
   // password is set.
   return { user };
-}
-
-function computeMetrics(d: Db): DashboardMetrics {
-  const now = new Date();
-  const open = d.cases.filter((c) => OPEN_STATUSES.includes(c.status));
-
-  const closed = d.cases.filter((c) => !OPEN_STATUSES.includes(c.status));
-  const completedThisMonth = closed.filter(
-    (c) => c.sla.closureDate && isSameMonth(parseISO(c.sla.closureDate), now),
-  ).length;
-
-  const tally = (items: string[]): NameValue[] => {
-    const m = new Map<string, number>();
-    for (const k of items) m.set(k, (m.get(k) ?? 0) + 1);
-    return Array.from(m, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  };
-
-  const openWithType = (t: string) =>
-    open.filter((c) => c.requestTypes.map(String).includes(t)).length;
-
-  const receivedThisMonth = d.cases.filter(
-    (c) => isSameMonth(parseISO(c.sla.receivedDate), now),
-  ).length;
-  const projectClosedStatuses = new Set(['Approved', 'Denied', 'Closed']);
-  const projectDateThisMonth = (value?: string) => {
-    if (!value) return false;
-    try {
-      return isSameMonth(parseISO(value), now);
-    } catch {
-      return false;
-    }
-  };
-
-  return {
-    openCases: open.length,
-    newCases: d.cases.filter((c) => c.status === 'New').length,
-    completedThisMonth,
-    byType: tally(d.cases.flatMap((c) => c.requestTypes.map(String))),
-    byJurisdiction: tally(d.cases.map((c) => String(c.jurisdiction))),
-    byStatus: tally(d.cases.map((c) => c.status)),
-    accessCount: openWithType('Access'),
-    deletionCount: openWithType('Deletion'),
-    correctionCount: openWithType('Correction'),
-    unsubscribeCount: openWithType('Unsubscribe'),
-    doNotSaleCount: openWithType('Do Not Sell'),
-    receivedThisMonth,
-    closedThisMonth: completedThisMonth,
-    totalProjects: d.projects.length,
-    activeProjects: d.projects.filter((p) => !projectClosedStatuses.has(p.status)).length,
-    projectsThisMonth: d.projects.filter((p) => projectDateThisMonth(p.dateNotificationReceived ?? p.createdAt)).length,
-    closedProjectsThisMonth: d.projects.filter((p) => projectClosedStatuses.has(p.status) && projectDateThisMonth(p.createdAt)).length,
-  };
 }
 
 // ---- Project identity ---------------------------------------------------------

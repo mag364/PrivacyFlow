@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NewCaseInput, PrivacyFlowAPI } from './types';
 
@@ -13,6 +15,7 @@ const input = (dates: NewCaseInput['intakeDates'] = {}): NewCaseInput => ({
 
 beforeEach(async () => {
   vi.resetModules();
+  vi.stubGlobal('crypto', webcrypto);
   const storage = new Map<string, string>();
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -117,5 +120,37 @@ describe('Cc delivery', () => {
     sendMail.mockRejectedValueOnce(new Error('Test failure'));
     await api.cases.create(input({ standardResponseSent: '2026-09-11' }));
     expect(mailDraft).toHaveBeenCalledWith(expect.objectContaining({ cc: 'ron@example.test' }));
+  });
+});
+
+
+describe('rich template delivery', () => {
+  it('sends escaped HTML plus readable text to Outlook with Cc', async () => {
+    const settings = await api.system.settings();
+    await api.system.updateSettings({ emailTemplates: settings.emailTemplates.map(t => t.id === 'tpl-standard-response'
+      ? { ...t, bodyFormat: 'html', body: '<p>Hello <b>{{requester.lastName}}</b></p><img src="data:image/png;base64,aGVsbG8=">', cc: 'Ron K.' } : t) });
+    const request = input({ standardResponseSent: '2026-09-11' });
+    request.subject.lastName = '<Test & Co>';
+    const c = await api.cases.create(request);
+    expect(openDraft).toHaveBeenCalledWith(expect.objectContaining({
+      cc: 'ron@example.test', bodyHtml: expect.stringContaining('<b>&lt;Test &amp; Co&gt;</b>'),
+      body: expect.stringContaining('Hello <Test & Co>'),
+    }));
+    expect((await api.cases.communications(c.id))[0].summary).not.toContain('base64');
+  });
+  it('sends HTML to Graph and explains plain-text mailto fallback', async () => {
+    const settings = await api.system.settings();
+    await api.system.updateSettings({ emailTemplates: settings.emailTemplates.map(t => t.id === 'tpl-standard-response'
+      ? { ...t, bodyFormat: 'html', body: '<p><b>Formatted</b></p>' } : t),
+      m365: { connected: true, mode: 'graph', clientId: 'test', accessToken: 'test', expiresAt: '2099-01-01T00:00:00Z' } });
+    const sendMail = vi.fn().mockResolvedValue(true);
+    const mailDraft = vi.fn().mockResolvedValue(true);
+    vi.stubGlobal('privacyflow', { graph: { sendMail }, mail: { openDraft: mailDraft } });
+    await api.cases.create(input({ standardResponseSent: '2026-09-11' }));
+    expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({ bodyHtml: expect.stringContaining('<p><b>Formatted</b></p>') }));
+    sendMail.mockRejectedValueOnce(new Error('test failure'));
+    const c = await api.cases.create(input({ standardResponseSent: '2026-09-11' }));
+    expect(mailDraft).toHaveBeenCalledWith(expect.objectContaining({ body: 'Formatted' }));
+    expect((await api.cases.communications(c.id))[0].summary).toContain('plain-text fallback');
   });
 });

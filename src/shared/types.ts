@@ -285,6 +285,7 @@ export interface EmailTemplate {
   body: string;
   audience: 'requester' | 'department';
   cc?: string;
+  bodyFormat?: 'text' | 'html';
   department?: string;
 }
 

@@ -1,3 +1,4 @@
+import { renderEmailHtml, emailHtmlToText } from '../lib/emailHtml';
 import { resolveAutomationCc } from '@shared/emailRecipients';
 import { computeMetrics } from './dashboardMetrics';
 import { addDays, parseISO } from 'date-fns';
@@ -544,7 +545,12 @@ async function runAutomations(
     const subject = sourceEmail
       ? prefixedSubject(isDept ? 'FW' : 'RE', sourceEmail.subject)
       : renderedSubject;
-    const body = `${renderTemplate(tpl.body, c, settings.organizationName, tpl.department)}${sourceEmail ? formatOriginalEmail(sourceEmail) : ''}`;
+    const originalText = sourceEmail ? formatOriginalEmail(sourceEmail) : '';
+    const bodyHtml = tpl.bodyFormat === 'html'
+      ? renderEmailHtml(tpl.body, requestPlaceholderValues(c, settings.organizationName, tpl.department), originalText)
+      : undefined;
+    const body = bodyHtml !== undefined ? emailHtmlToText(bodyHtml)
+      : `${renderTemplate(tpl.body, c, settings.organizationName, tpl.department)}${originalText}`;
     const now = new Date().toISOString();
     const graph = m365?.mode === 'graph' ? graphBridge() : null;
     const outlook = m365?.mode === 'outlook' ? outlookBridge() : null;
@@ -566,12 +572,12 @@ async function runAutomations(
       try {
         const accessToken = await graphAccessToken(d);
         if (!graph || !accessToken) throw new Error('Microsoft Graph connection is unavailable.');
-        await graph.sendMail({ accessToken, to: recipient, cc: cc || undefined, subject, body, saveToSentItems: true });
+        await graph.sendMail({ accessToken, to: recipient, cc: cc || undefined, subject, body, bodyHtml, saveToSentItems: true });
         deliveryStatus = 'Sent with Microsoft Graph';
       } catch (e) {
         if (fallbackDraft) {
           try {
-            await fallbackDraft.openDraft({ to: recipient, cc: cc || undefined, subject, body });
+            await fallbackDraft.openDraft({ to: recipient, cc: cc || undefined, subject, body, bodyHtml });
             deliveryStatus = 'Draft opened in default mail app';
             deliveryNote = `\n\nMicrosoft Graph send failed, so PrivacyFlow opened a mail draft instead: ${e instanceof Error ? e.message : 'Graph send failed.'}`;
           } catch {
@@ -586,11 +592,11 @@ async function runAutomations(
     } else if ((m365?.mode === 'outlook' || m365?.mode === 'mailto') && /.+@.+\..+/.test(recipient)) {
       try {
         if (m365.mode === 'outlook' && outlook) {
-          const opened = await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, cc: cc || undefined, subject, body });
+          const opened = await outlook.openDraft({ accountEmail: m365.accountEmail, to: recipient, cc: cc || undefined, subject, body, bodyHtml });
           if (!opened) throw new Error('Outlook did not confirm that the draft window opened.');
           deliveryStatus = 'Draft opened in Outlook';
         } else if (fallbackDraft) {
-          await fallbackDraft.openDraft({ to: recipient, cc: cc || undefined, subject, body });
+          await fallbackDraft.openDraft({ to: recipient, cc: cc || undefined, subject, body, bodyHtml });
           deliveryStatus = 'Draft opened in default mail app';
           deliveryNote = '\n\nOpened with the default mail app because local Outlook automation was unavailable.';
         } else {
@@ -609,6 +615,10 @@ async function runAutomations(
       deliveryNote = '\n\nBrowser preview records simulated delivery only. Open the Windows desktop app and connect Microsoft 365 (Outlook) to create drafts.';
     } else {
       deliveryNote = '\n\nNo Microsoft 365 (Outlook) mailbox is connected, so PrivacyFlow logged this automation only.';
+    }
+
+    if (bodyHtml && deliveryStatus === 'Draft opened in default mail app') {
+      deliveryNote += '\n\nThe default mail app received a plain-text fallback. Use the Outlook connection to preserve formatting and embedded images.';
     }
 
     d.communications.push({

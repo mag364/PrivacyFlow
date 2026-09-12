@@ -124,6 +124,7 @@ export interface MailDraftInput {
   cc?: string;
   subject: string;
   body: string;
+  bodyHtml?: string;
 }
 
 export interface MailBridge {
@@ -163,6 +164,7 @@ export interface M365SendMailInput {
   cc?: string;
   subject: string;
   body: string;
+  bodyHtml?: string;
   saveToSentItems?: boolean;
 }
 

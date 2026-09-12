@@ -63,7 +63,9 @@ function parseTemplate(value: unknown, index: number): EmailTemplate {
   if (audience !== 'requester' && audience !== 'department') {
     throw new Error(`Email template ${index + 1} has an unsupported audience.`);
   }
+  if (value.bodyFormat !== undefined && value.bodyFormat !== 'text' && value.bodyFormat !== 'html') throw new Error('Unsupported email template body format.');
   return {
+    bodyFormat: value.bodyFormat as EmailTemplate['bodyFormat'],
     id: requiredString(value.id, `Email template ${index + 1} ID`),
     name: stringValue(value.name, `Email template ${index + 1} name`),
     subject: stringValue(value.subject, `Email template ${index + 1} subject`),

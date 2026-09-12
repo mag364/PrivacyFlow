@@ -29,8 +29,9 @@ describe('automation transfers', () => {
 
   it('preserves template Cc in personal automation exports and imports', () => {
     const file = createAutomationTransfer({ ...settings, emailTemplates: [
-      { ...settings.emailTemplates[0], cc: 'Ron K.; team@example.com' },
+      { ...settings.emailTemplates[0], cc: 'Ron K.; team@example.com', bodyFormat: 'html', body: '<p><b>Test</b><img src="data:image/png;base64,aGVsbG8="></p>' },
     ] });
+    expect(parseAutomationTransfer(JSON.stringify(file)).emailTemplates[0]).toMatchObject(file.data.emailTemplates[0]);
     expect(parseAutomationTransfer(JSON.stringify(file)).emailTemplates[0].cc).toBe('Ron K.; team@example.com');
   });
 

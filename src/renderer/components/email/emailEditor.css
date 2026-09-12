@@ -1,0 +1,12 @@
+.pf-email-editor .ql-toolbar.ql-snow { border: 1px solid var(--pf-line, #334155); border-radius: 8px 8px 0 0; background: #f1f5f9; }
+.pf-email-editor .ql-container.ql-snow { border: 1px solid var(--pf-line, #334155); border-radius: 0 0 8px 8px; background: white; color: #111827; font-family: Arial, sans-serif; font-size: 15px; }
+.pf-email-editor .ql-editor { min-height: 260px; max-height: 600px; overflow: auto; }
+.pf-email-editor .ql-editor img { max-width: 100%; height: auto; }
+.pf-email-editor .ql-snow .ql-picker.ql-font { width: 145px; }
+.pf-email-editor .ql-snow .ql-picker.ql-font [data-value]::before,
+.pf-email-editor .ql-snow .ql-picker.ql-size [data-value]::before { content: attr(data-value); }
+.pf-email-editor .ql-snow .ql-picker.ql-font :not([data-value])::before { content: 'Arial'; }
+.pf-email-editor .ql-snow .ql-picker.ql-size :not([data-value])::before { content: '15px'; }
+.pf-email-editor .ql-tooltip { z-index: 10; }
+.pf-editor-button { padding: 5px 9px; border: 1px solid var(--pf-line, #334155); border-radius: 7px; font-size: 12px; }
+.pf-editor-button:disabled { opacity: .4; }

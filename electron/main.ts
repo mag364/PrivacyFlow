@@ -1,3 +1,4 @@
+import { prepareHtmlEmail } from '../src/shared/emailAttachments';
 import { parseCcAddresses } from '../src/shared/emailRecipients';
 // -----------------------------------------------------------------------------
 // Electron main process (desktop build).
@@ -1079,7 +1080,7 @@ ipcMain.handle('updater:applyReleaseAsset', async (_e, input: { assetApiUrl?: st
   return { filePath, appFolder: info.folderPath, updaterScriptPath: updater.scriptPath, mode: 'automatic' as const, message: `Updater log: ${updater.logPath}` };
 });
 
-ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; cc?: string; subject?: string; body?: string }) => {
+ipcMain.handle('mail:openDraft', async (_e, input: { to?: string; cc?: string; subject?: string; body?: string; bodyHtml?: string }) => {
   const to = String(input?.to || '').trim();
   const cc = parseCcAddresses(input?.cc);
   if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
@@ -1197,12 +1198,13 @@ ipcMain.handle('graph:profile', async (_e, input: { accessToken?: string }) => {
   return json;
 });
 
-ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: string; cc?: string; subject?: string; body?: string; saveToSentItems?: boolean }) => {
+ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: string; cc?: string; subject?: string; body?: string; bodyHtml?: string; saveToSentItems?: boolean }) => {
   const accessToken = String(input?.accessToken || '').trim();
   const to = String(input?.to || '').trim();
   const cc = parseCcAddresses(input?.cc);
   if (!accessToken) throw new Error('Microsoft Graph access token is unavailable.');
   if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
+  const rich = prepareHtmlEmail(input?.bodyHtml);
   const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
     method: 'POST',
     headers: {
@@ -1213,11 +1215,12 @@ ipcMain.handle('graph:sendMail', async (_e, input: { accessToken?: string; to?: 
       message: {
         subject: String(input?.subject || ''),
         body: {
-          contentType: 'Text',
-          content: String(input?.body || ''),
+          contentType: rich.html !== undefined ? 'HTML' : 'Text',
+          content: rich.html ?? String(input?.body || ''),
         },
         toRecipients: [{ emailAddress: { address: to } }],
         ccRecipients: cc.map(address => ({ emailAddress: { address } })),
+        attachments: rich.images.map(image => ({ '@odata.type': '#microsoft.graph.fileAttachment', ...image, isInline: true })),
       },
       saveToSentItems: input?.saveToSentItems ?? true,
     }),
@@ -1273,22 +1276,25 @@ $accounts | ConvertTo-Json -Compress
   return Array.isArray(parsed) ? parsed : [parsed];
 });
 
-ipcMain.handle('outlook:openDraft', async (_e, input: { accountEmail?: string; to?: string; cc?: string; subject?: string; body?: string }) => {
+ipcMain.handle('outlook:openDraft', async (_e, input: { accountEmail?: string; to?: string; cc?: string; subject?: string; body?: string; bodyHtml?: string }) => {
   const successMarker = 'PRIVACYFLOW_DRAFT_OPENED';
   const accountEmail = String(input?.accountEmail || '').trim();
   const to = String(input?.to || '').trim();
   const cc = parseCcAddresses(input?.cc);
   if (!/.+@.+\..+/.test(to)) throw new Error('A valid recipient email address is required.');
-  const payload = Buffer.from(JSON.stringify({
-    accountEmail,
-    to,
-    cc: cc.join('; '),
-    subject: String(input?.subject || ''),
-    body: String(input?.body || ''),
-  }), 'utf8').toString('base64');
-  const script = `
+  const rich = prepareHtmlEmail(input?.bodyHtml);
+  const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'privacyflow-draft-'));
+  const payloadPath = path.join(tempDir, 'message.json');
+  const encodedPath = Buffer.from(payloadPath, 'utf8').toString('base64');
+  try {
+    fs.writeFileSync(payloadPath, JSON.stringify({
+      accountEmail, to, cc: cc.join('; '), subject: String(input?.subject || ''),
+      body: String(input?.body || ''), bodyHtml: rich.html, images: rich.images, tempDir,
+    }), { encoding: 'utf8', mode: 0o600 });
+    const script = `
 $ErrorActionPreference = 'Stop'
-$json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${payload}'))
+$payloadPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPath}'))
+$json = [IO.File]::ReadAllText($payloadPath, [Text.Encoding]::UTF8)
 $input = $json | ConvertFrom-Json
 $outlook = New-Object -ComObject Outlook.Application
 $session = $outlook.Session
@@ -1309,7 +1315,20 @@ if ($input.accountEmail) {
 $mail.To = [string]$input.to
 $mail.CC = [string]$input.cc
 $mail.Subject = [string]$input.subject
-$mail.Body = [string]$input.body
+if ($null -ne $input.bodyHtml) {
+  foreach ($image in $input.images) {
+    $imagePath = Join-Path $input.tempDir $image.name
+    [IO.File]::WriteAllBytes($imagePath, [Convert]::FromBase64String($image.contentBytes))
+    $attachment = $mail.Attachments.Add($imagePath, 1)
+    $attachment.PropertyAccessor.SetProperty('http://schemas.microsoft.com/mapi/proptag/0x3712001F', [string]$image.contentId)
+    $attachment.PropertyAccessor.SetProperty('http://schemas.microsoft.com/mapi/proptag/0x370E001F', [string]$image.contentType)
+    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($attachment)
+  }
+  $mail.BodyFormat = 2
+  $mail.HTMLBody = [string]$input.bodyHtml
+} else {
+  $mail.Body = [string]$input.body
+}
 $mail.Display($false)
 [Console]::Out.WriteLine('${successMarker}')
 [Console]::Out.Flush()
@@ -1319,8 +1338,11 @@ if ($outlook) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($
 [GC]::Collect()
 [GC]::WaitForPendingFinalizers()
 `;
-  const stdout = await runOutlookScript(script, successMarker);
-  return stdout.includes(successMarker);
+    const stdout = await runOutlookScript(script, successMarker);
+    return stdout.includes(successMarker);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 app.whenReady().then(() => {

@@ -1,3 +1,5 @@
+import { EmailBodyEditor, type EmailBodyEditorHandle } from '../../components/email/EmailBodyEditor';
+import { plainTextToHtml, sanitizeEmailHtml } from '../../lib/emailHtml';
 import { resolveAutomationCc } from '@shared/emailRecipients';
 import React from 'react';
 import {
@@ -47,7 +49,7 @@ export function AutomationPage() {
   const [editingTemplate, setEditingTemplate] = React.useState<EmailTemplate | null>(null);
   const [editingNoteTemplate, setEditingNoteTemplate] = React.useState<NoteTemplate | null>(null);
   const [expandedRules, setExpandedRules] = React.useState<string[]>([]);
-  const templateBodyRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const templateBodyRef = React.useRef<EmailBodyEditorHandle | null>(null);
   const noteBodyRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   React.useEffect(() => {
@@ -69,6 +71,7 @@ export function AutomationPage() {
   }
 
   function saveTemplate(t: EmailTemplate) {
+    if (t.bodyFormat === 'html') t = { ...t, body: sanitizeEmailHtml(t.body) };
     const list = settings!.emailTemplates;
     const exists = list.some((x) => x.id === t.id);
     patch({ emailTemplates: exists ? list.map((x) => (x.id === t.id ? t : x)) : [...list, t] });
@@ -313,23 +316,18 @@ export function AutomationPage() {
               <Field label="Subject">
                 <GlassInput value={editingTemplate.subject} onChange={(e) => setEditingTemplate({ ...editingTemplate, subject: e.target.value })} />
               </Field>
-              <Field label="Body">
-                <GlassTextarea
-                  ref={templateBodyRef}
-                  rows={7}
-                  value={editingTemplate.body}
-                  onChange={(e) => setEditingTemplate({ ...editingTemplate, body: e.target.value })}
-                />
-              </Field>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted">Body</span>
+                <EmailBodyEditor key={editingTemplate.id} ref={templateBodyRef}
+                  value={editingTemplate.bodyFormat === 'html' ? editingTemplate.body : plainTextToHtml(editingTemplate.body)}
+                  onChange={body => setEditingTemplate({ ...editingTemplate, body, bodyFormat: 'html' })} />
+              </div>
               <div className="flex flex-wrap gap-1">
                 {REQUEST_PLACEHOLDERS.map((p) => (
                   <button
                     key={p.key}
                     type="button"
-                    onClick={() => setEditingTemplate({
-                      ...editingTemplate,
-                      body: insertTextAtCursor(templateBodyRef.current, editingTemplate.body, p.token),
-                    })}
+                    onClick={() => templateBodyRef.current?.insertText(p.token)}
                     className="rounded-capsule border border-line px-2 py-1 text-[11px] text-muted hover:text-ink focus-ring"
                     title={p.label}
                   >

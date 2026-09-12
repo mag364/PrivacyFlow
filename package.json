@@ -1,14 +1,14 @@
 {
   "name": "privacyflow",
   "private": true,
-  "version": "1.1.13",
-  "releaseVersion": "1.1.13",
+  "version": "1.1.14",
+  "releaseVersion": "1.1.14",
   "type": "module",
   "main": "build/electron/main.js",
   "author": {
     "name": "ModernFix Pros, LLC"
   },
-  "description": "PrivacyFlow — local-first Data Subject Request (DSR) management with a tamper-evident audit trail.",
+  "description": "PrivacyFlow \u2014 local-first Data Subject Request (DSR) management with a tamper-evident audit trail.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -24,7 +24,9 @@
     "@tanstack/react-table": "8.20.5",
     "clsx": "2.1.1",
     "date-fns": "3.6.0",
+    "dompurify": "3.4.15",
     "lucide-react": "0.468.0",
+    "quill": "2.0.3",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-hook-form": "7.53.2",
@@ -36,7 +38,7 @@
   "build": {
     "appId": "com.mag364.privacyflow",
     "productName": "PrivacyFlow",
-    "copyright": "Copyright © 2026 ModernFix Pros, LLC",
+    "copyright": "Copyright \u00a9 2026 ModernFix Pros, LLC",
     "directories": {
       "output": "release"
     },
@@ -67,6 +69,7 @@
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
+    "jsdom": "29.1.1",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.17",
     "typescript": "5.6.3",
